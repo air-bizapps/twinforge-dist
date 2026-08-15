@@ -16,15 +16,16 @@ curl -fsSL https://raw.githubusercontent.com/air-bizapps/twinforge-dist/main/ins
 irm https://raw.githubusercontent.com/air-bizapps/twinforge-dist/main/install.ps1 | iex
 ```
 
-> Os instaladores ainda não existem — este repositório acaba de ser criado e é preenchido pelo
-> plano de implementação do canal. Até lá, os comandos acima são o alvo, não o estado.
+Ambos instalam do canal `canary`, que é o único canal aberto por ora — `stable` só abre quando o
+enrollment existir. Para instalar de outro canal: `TWINFORGE_CHANNEL=<canal>`.
 
 O TwinForge instalado **não sobe sem login numa instância da organização**. Instalar é o primeiro
 passo; o segundo é o enrollment.
 
 ## Canais
 
-- `channels/canary.json` — versões de validação interna
+- `channels/canary.json` — versões de validação interna; **o único canal aberto hoje**, e o padrão
+  dos dois instaladores
 - `channels/stable.json` — liberado apenas quando o enrollment existir
 
 ## Plataformas

@@ -142,6 +142,15 @@ fi
 VERSION="$(manifest_get_top "$MANIFEST_FILE" version)"
 [ -n "$VERSION" ] || fail "Manifest at $MANIFEST_URL has no \"version\" field. It may be malformed, or the channel may not exist yet."
 
+# $VERSION becomes a directory name under $APP_DIR/versions and is interpolated
+# into the `rm -rf` below. It is remote input, so it is checked before it is
+# used as a path — "." and ".." pass the character class but would aim that
+# delete at the versions directory or the install root itself.
+case "$VERSION" in
+  . | ..) fail "Manifest at $MANIFEST_URL declares an unusable version \"$VERSION\". The version is used as a directory name; \".\" and \"..\" are not names. Refusing to continue." ;;
+  *[!A-Za-z0-9._-]*) fail "Manifest at $MANIFEST_URL declares an unusable version \"$VERSION\". Expected only letters, digits, dot, underscore and hyphen, because the version is used as a directory name. Refusing to continue." ;;
+esac
+
 ARTIFACT_URL="$(manifest_get_artifact_field "$MANIFEST_FILE" "$PLATFORM_TAG" url)"
 ARTIFACT_SHA256="$(manifest_get_artifact_field "$MANIFEST_FILE" "$PLATFORM_TAG" sha256)"
 if [ -z "$ARTIFACT_URL" ] || [ -z "$ARTIFACT_SHA256" ]; then

@@ -44,9 +44,8 @@ if ($arch -ne [System.Runtime.InteropServices.Architecture]::X64) {
 $PlatformTag = "win-x64"
 
 # --- Manifest helpers ----------------------------------------------------------
-# Invoke-RestMethod already parses the JSON into an object, so an unrelated
-# field the manifest grows later cannot break this: we only read the
-# properties we need.
+# The manifest is parsed into an object below, so an unrelated field the
+# manifest grows later cannot break this: we only read the properties we need.
 
 function Get-ArtifactField($Manifest, [string]$Field) {
     $artifact = $Manifest.artifacts.$PlatformTag
@@ -92,15 +91,42 @@ function Write-NextSteps {
 
 $ManifestUrl = "$BaseUrl/channels/$Channel.json"
 Write-Host "Fetching the $Channel channel manifest..."
+# Fetch the bytes and parse them ourselves rather than letting Invoke-RestMethod
+# decide. Invoke-RestMethod only deserializes when the response carries a JSON
+# content type, and the default host here — raw.githubusercontent.com — serves
+# .json as `text/plain; charset=utf-8` with nosniff. Under Invoke-RestMethod the
+# manifest would come back as a plain string, every property read below would be
+# $null, and the script would abort telling the developer that our manifest is
+# malformed — blaming the publisher for a bug on this side, on the first command
+# they ever run. Parsing unconditionally is correct for any content type the
+# host sends.
 try {
-    $Manifest = Invoke-RestMethod -Uri $ManifestUrl -UseBasicParsing
+    $ManifestBody = (Invoke-WebRequest -Uri $ManifestUrl -UseBasicParsing).Content
+    # Windows PowerShell 5.1 hands back .Content as a byte array rather than a
+    # string for content types it does not classify as text, so decode when
+    # that is what arrived. Whichever shape it is, it is parsed the same way.
+    if ($ManifestBody -is [byte[]]) {
+        $ManifestBody = [System.Text.Encoding]::UTF8.GetString($ManifestBody)
+    }
+    $Manifest = $ManifestBody | ConvertFrom-Json
 } catch {
-    Fail "Could not download the channel manifest from $ManifestUrl`nCheck your network connection, and that TWINFORGE_CHANNEL=$Channel names a real channel.`n$($_.Exception.Message)"
+    Fail "Could not read the channel manifest from $ManifestUrl`nCheck your network connection, and that TWINFORGE_CHANNEL=$Channel names a real channel.`n$($_.Exception.Message)"
 }
 
 $Version = $Manifest.version
 if (-not $Version) {
     Fail "Manifest at $ManifestUrl has no 'version' field. It may be malformed, or the channel may not exist yet."
+}
+
+# $Version becomes a directory name under $AppDir\versions and is interpolated
+# into the Remove-Item below. It is remote input, so it is checked before it is
+# used as a path — `.` and `..` pass the character class but would aim that
+# delete at the versions directory or the install root itself.
+#
+# \A and \z, not ^ and $: in .NET regex `$` also matches immediately before a
+# trailing newline, so "1.0.0`n<anything>" would pass a `$`-anchored check.
+if (($Version -notmatch '\A[A-Za-z0-9._-]+\z') -or ($Version -eq ".") -or ($Version -eq "..")) {
+    Fail "Manifest at $ManifestUrl declares an unusable version '$Version'. Expected only letters, digits, dot, underscore and hyphen (and not '.' or '..'), because the version is used as a directory name. Refusing to continue."
 }
 
 $ArtifactUrl = Get-ArtifactField $Manifest "url"
@@ -146,11 +172,22 @@ try {
 }
 try {
     $TarballPath = Join-Path $WorkDir "twinforge.tar.gz"
-    Write-Host "Downloading TwinForge $Version for $PlatformTag..."
+    Write-Host "Downloading TwinForge $Version for $PlatformTag... (a few hundred MiB; no progress is shown)"
+    # Windows PowerShell 5.1 renders the Invoke-WebRequest progress bar
+    # synchronously, and at this artifact's size that rendering dominates the
+    # transfer — the download looks hung. Scoped to this one call and restored
+    # in `finally`, not set at the top of the script: the documented entry
+    # point is `irm ... | iex`, which runs in the *caller's own session*, so a
+    # top-level assignment would silently disable progress bars in the
+    # developer's terminal for everything they run afterwards.
+    $PreviousProgressPreference = $ProgressPreference
+    $ProgressPreference = "SilentlyContinue"
     try {
         Invoke-WebRequest -Uri $ArtifactUrl -OutFile $TarballPath -UseBasicParsing
     } catch {
         Fail "Download failed: $ArtifactUrl`nCheck your network connection and try again.`n$($_.Exception.Message)"
+    } finally {
+        $ProgressPreference = $PreviousProgressPreference
     }
 
     try {
@@ -168,7 +205,11 @@ try {
     # `tar` is what actually extracts it, and has shipped in Windows since
     # 10 1803 / Server 2019 (bsdtar), which is also what windows-latest CI runners have.
     $ExtractDir = Join-Path $WorkDir "extracted"
-    New-Item -ItemType Directory -Path $ExtractDir | Out-Null
+    try {
+        New-Item -ItemType Directory -Path $ExtractDir -Force | Out-Null
+    } catch {
+        Fail "Could not create the extraction directory at $ExtractDir.`n$($_.Exception.Message)"
+    }
     & tar -xzf $TarballPath -C $ExtractDir
     if ($LASTEXITCODE -ne 0) {
         Fail "Could not extract $TarballPath. The archive may be corrupted; try again."
