@@ -150,10 +150,18 @@ fi
 
 VERSIONS_DIR="$APP_DIR/versions"
 VERSION_DIR="$VERSIONS_DIR/$VERSION"
+# Written only after the version directory AND bin/ are both fully in place.
+# Idempotency is gated on this, not on $VERSION_DIR existing, because a
+# directory existing while bin/ is still incomplete (interrupted disk-full,
+# permission error, Ctrl-C) must not read as "already installed" forever.
+INSTALLED_MARKER="$VERSION_DIR/.installed"
 
 # --- Idempotent short-circuit --------------------------------------------------
+# Also requires the launcher to still be there: bin/ is shared across every
+# version (not per-version, unlike the marker above), so it can go missing
+# after a fully successful install too — the marker alone can't see that.
 
-if [ -d "$VERSION_DIR" ]; then
+if [ -f "$INSTALLED_MARKER" ] && [ -x "$APP_DIR/bin/twinforge" ]; then
   echo "TwinForge $VERSION is already installed."
   point_current "$VERSION_DIR"
   add_bin_to_path
@@ -185,10 +193,18 @@ tar -xzf "$TARBALL" -C "$EXTRACT_DIR" || fail "Could not extract $TARBALL. The a
 [ -d "$EXTRACT_DIR/$VERSION" ] || fail "Downloaded archive does not contain a $VERSION directory. This looks like a packaging bug, not a network problem — please report it."
 [ -d "$EXTRACT_DIR/bin" ] || fail "Downloaded archive has no bin/ directory. This looks like a packaging bug, not a network problem — please report it."
 
+# A previous run may have been interrupted after $VERSION_DIR was created but
+# before the marker was written. `mv` onto an existing directory would nest
+# into it instead of replacing it, so clear that stale, unmarked state first.
+rm -rf "$VERSION_DIR"
+
 mkdir -p "$VERSIONS_DIR" "$APP_DIR/bin"
-mv "$EXTRACT_DIR/$VERSION" "$VERSION_DIR"
+# bin/ is populated, and the marker written, only after the version directory
+# is committed below — see INSTALLED_MARKER above for why the ordering matters.
 cp -R "$EXTRACT_DIR/bin/." "$APP_DIR/bin/"
 chmod +x "$APP_DIR/bin/twinforge" 2>/dev/null || true
+mv "$EXTRACT_DIR/$VERSION" "$VERSION_DIR"
+touch "$INSTALLED_MARKER"
 
 point_current "$VERSION_DIR"
 add_bin_to_path

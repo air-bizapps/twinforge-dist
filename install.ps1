@@ -55,12 +55,16 @@ function Get-ArtifactField($Manifest, [string]$Field) {
 }
 
 function Set-Current([string]$Target) {
-    $currentLink = Join-Path $AppDir "current"
-    if (Test-Path $currentLink) {
-        (Get-Item $currentLink -Force).Delete()
+    try {
+        $currentLink = Join-Path $AppDir "current"
+        if (Test-Path $currentLink) {
+            (Get-Item $currentLink -Force).Delete()
+        }
+        # Junction, not symlink: symlinks need elevation on Windows, junctions do not.
+        New-Item -ItemType Junction -Path $currentLink -Target $Target | Out-Null
+    } catch {
+        Fail "Could not point 'current' at $Target.`n$($_.Exception.Message)"
     }
-    # Junction, not symlink: symlinks need elevation on Windows, junctions do not.
-    New-Item -ItemType Junction -Path $currentLink -Target $Target | Out-Null
 }
 
 function Add-BinToUserPath {
@@ -107,10 +111,21 @@ if (-not $ArtifactUrl -or -not $ArtifactSha256) {
 
 $VersionsDir = Join-Path $AppDir "versions"
 $VersionDir = Join-Path $VersionsDir $Version
+# Written only after the version directory AND bin\ are both fully in place.
+# Idempotency is gated on this, not on $VersionDir existing, because a
+# directory existing while bin\ is still incomplete (interrupted disk-full,
+# permission error, Ctrl-C) must not read as "already installed" forever.
+$InstalledMarker = Join-Path $VersionDir ".installed"
+# packaging/build-release-tarball.mjs names the Windows launcher twinforge.cmd
+# (not twinforge, which is the POSIX name).
+$LauncherPath = Join-Path (Join-Path $AppDir "bin") "twinforge.cmd"
 
 # --- Idempotent short-circuit --------------------------------------------------
+# Also requires the launcher to still be there: bin\ is shared across every
+# version (not per-version, unlike the marker above), so it can go missing
+# after a fully successful install too — the marker alone can't see that.
 
-if (Test-Path $VersionDir) {
+if ((Test-Path $InstalledMarker) -and (Test-Path $LauncherPath)) {
     Write-Host "TwinForge $Version is already installed."
     Set-Current $VersionDir
     Add-BinToUserPath
@@ -124,7 +139,11 @@ if (Test-Path $VersionDir) {
 # --- Download, verify, then extract --------------------------------------------
 
 $WorkDir = Join-Path ([System.IO.Path]::GetTempPath()) "twinforge-install-$([guid]::NewGuid())"
-New-Item -ItemType Directory -Path $WorkDir -Force | Out-Null
+try {
+    New-Item -ItemType Directory -Path $WorkDir -Force | Out-Null
+} catch {
+    Fail "Could not create a temporary working directory at $WorkDir.`n$($_.Exception.Message)"
+}
 try {
     $TarballPath = Join-Path $WorkDir "twinforge.tar.gz"
     Write-Host "Downloading TwinForge $Version for $PlatformTag..."
@@ -134,7 +153,11 @@ try {
         Fail "Download failed: $ArtifactUrl`nCheck your network connection and try again.`n$($_.Exception.Message)"
     }
 
-    $ActualSha256 = (Get-FileHash -Algorithm SHA256 -Path $TarballPath).Hash
+    try {
+        $ActualSha256 = (Get-FileHash -Algorithm SHA256 -Path $TarballPath).Hash
+    } catch {
+        Fail "Could not compute the checksum of the downloaded file at $TarballPath.`n$($_.Exception.Message)"
+    }
     if ($ActualSha256.ToLower() -ne $ArtifactSha256.ToLower()) {
         Fail "Checksum mismatch for $ArtifactUrl`n  expected $ArtifactSha256`n  actual   $ActualSha256`nThe download may be corrupted or tampered with. Try again, and if it keeps happening, report it."
     }
@@ -160,10 +183,24 @@ try {
         Fail "Downloaded archive has no bin\ directory. This looks like a packaging bug, not a network problem — please report it."
     }
 
-    New-Item -ItemType Directory -Path $VersionsDir -Force | Out-Null
-    New-Item -ItemType Directory -Path (Join-Path $AppDir "bin") -Force | Out-Null
-    Move-Item -Path $ExtractedVersionDir -Destination $VersionDir
-    Copy-Item -Path (Join-Path $ExtractedBinDir "*") -Destination (Join-Path $AppDir "bin") -Recurse -Force
+    try {
+        # A previous run may have been interrupted after $VersionDir was
+        # created but before the marker was written. Move-Item onto an
+        # existing directory would merge into it instead of replacing it, so
+        # clear that stale, unmarked state first. bin\ is populated, and the
+        # marker written, only after the version directory is committed below
+        # — see $InstalledMarker above for why the ordering matters.
+        if (Test-Path $VersionDir) {
+            Remove-Item -Path $VersionDir -Recurse -Force
+        }
+        New-Item -ItemType Directory -Path $VersionsDir -Force | Out-Null
+        New-Item -ItemType Directory -Path (Join-Path $AppDir "bin") -Force | Out-Null
+        Copy-Item -Path (Join-Path $ExtractedBinDir "*") -Destination (Join-Path $AppDir "bin") -Recurse -Force
+        Move-Item -Path $ExtractedVersionDir -Destination $VersionDir
+        New-Item -ItemType File -Path $InstalledMarker -Force | Out-Null
+    } catch {
+        Fail "Could not install TwinForge $Version into $AppDir.`n$($_.Exception.Message)"
+    }
 } finally {
     Remove-Item -Path $WorkDir -Recurse -Force -ErrorAction SilentlyContinue
 }
