@@ -240,7 +240,19 @@ assert_https_url() {
 }
 
 point_current() {
-  ln -sfn "$1" "$APP_DIR/current"
+  # `ln` relies on $APP_DIR/current being a symlink or absent. If it is a real
+  # directory — an earlier extraction that landed in the wrong place, a manual
+  # copy — GNU ln fails with "cannot overwrite directory", which on the
+  # already-installed path arrived immediately after the line saying the install
+  # was fine. install.ps1:56-67 wraps the same step in a try/catch with a real
+  # message; this is that message.
+  if [ -e "$APP_DIR/current" ] && [ ! -L "$APP_DIR/current" ]; then
+    fail "$APP_DIR/current is a real file or directory, not a symlink, so it cannot be pointed at $1." \
+      "Move it aside and re-run this script."
+  fi
+  ln -sfn "$1" "$APP_DIR/current" \
+    || fail "Could not point $APP_DIR/current at $1." \
+      "Check that $APP_DIR is writable, then re-run this script."
 }
 
 # Which startup file does this shell actually read? Prints it, or prints
@@ -312,8 +324,25 @@ add_bin_to_path() {
   if [ -f "$profile" ] && grep -qF "$bin_dir" "$profile" 2>/dev/null; then
     return 0
   fi
-  printf '\n# Added by the TwinForge installer\n%s\n' "$path_line" >> "$profile"
-  say "Added $bin_dir to PATH in $profile (open a new shell, or run: $path_line)"
+  # This one must never fail the install. It runs after everything is installed
+  # and correct, and a read-only profile is ordinary — dotfiles managed by
+  # chezmoi or stow, or a file left root-owned by an earlier sudo run. Under a
+  # bare `set -e` that `>>` exited before the next-steps output and re-running
+  # failed at the identical spot forever, insisting a complete, working install
+  # was broken.
+  # 2>/dev/null before the append, not after: redirections are set up left to
+  # right, so with the append first the shell prints its own "Permission denied"
+  # to the real stderr before the suppression takes effect, and the developer
+  # gets a raw diagnostic on top of the explanation below.
+  if printf '\n# Added by the TwinForge installer\n%s\n' "$path_line" 2>/dev/null >> "$profile"; then
+    say "Added $bin_dir to PATH in $profile (open a new shell, or run: $path_line)"
+  else
+    say "" \
+      "TwinForge is installed, but $profile could not be written (it may be" \
+      "read-only, or owned by another user). Add this line to it yourself:" \
+      "" \
+      "  $path_line"
+  fi
 }
 
 print_next_steps() {
@@ -493,17 +522,22 @@ The download may be corrupted or tampered with. Try again, and if it keeps happe
   fi
 
   EXTRACT_DIR="$WORK_DIR/extracted"
-  mkdir -p "$EXTRACT_DIR"
+  mkdir -p "$EXTRACT_DIR" \
+    || fail "Could not create the extraction directory at $EXTRACT_DIR."
   tar -xzf "$TARBALL" -C "$EXTRACT_DIR" || fail "Could not extract $TARBALL. The archive may be corrupted; try again."
 
   [ -d "$EXTRACT_DIR/$VERSION" ] || fail "Downloaded archive does not contain a $VERSION directory. This looks like a packaging bug, not a network problem — please report it."
   [ -f "$EXTRACT_DIR/bin/twinforge" ] || fail "Downloaded archive has no bin/twinforge launcher. This looks like a packaging bug, not a network problem — please report it."
 
-  mkdir -p "$VERSIONS_DIR"
+  mkdir -p "$VERSIONS_DIR" \
+    || fail "Could not create $VERSIONS_DIR." \
+      "Check that $HOME has space and that $APP_DIR is writable, then re-run this script."
   # A previous run may have been interrupted after $VERSION_DIR was created but
   # before the marker was written. `mv` onto an existing directory would nest
   # into it instead of replacing it, so clear that stale, unmarked state first.
-  rm -rf "$VERSION_DIR"
+  rm -rf "$VERSION_DIR" \
+    || fail "Could not remove the incomplete $VERSION_DIR left by an earlier run." \
+      "Remove it by hand and re-run this script."
 
   # The payload is committed first, then bin/, then the marker that says both
   # are there. bin/ is shared across every installed version, so writing it
@@ -514,15 +548,21 @@ The download may be corrupted or tampered with. Try again, and if it keeps happe
   # (disk full, realistically) after bin/ had already been replaced left the
   # machine with the new launcher over the old payload, `current` still pointing
   # at the old version, and no marker.
-  mv "$EXTRACT_DIR/$VERSION" "$VERSION_DIR"
-  mkdir -p "$APP_DIR/bin"
+  mv "$EXTRACT_DIR/$VERSION" "$VERSION_DIR" \
+    || fail "Could not move the unpacked TwinForge $VERSION into $VERSION_DIR." \
+      "This copies a few hundred MiB across filesystems, so a full disk is the usual cause. Free some space and re-run this script."
+  mkdir -p "$APP_DIR/bin" \
+    || fail "Could not create $APP_DIR/bin." \
+      "Check that $APP_DIR is writable, then re-run this script."
   # Only the launcher, not `cp -R bin/.`. bin/ holds exactly one file —
   # packaging/build-release-tarball.mjs writes bin/twinforge and nothing else —
   # so copying the directory wholesale gained nothing and accepted whatever a
   # future archive happened to contain into a directory that is on the PATH of
   # every shell. Naming the one file also means an upgrade or downgrade cannot
   # leave a stale launcher behind, which a merging `cp -R` never pruned.
-  cp "$EXTRACT_DIR/bin/twinforge" "$APP_DIR/bin/twinforge"
+  cp "$EXTRACT_DIR/bin/twinforge" "$APP_DIR/bin/twinforge" \
+    || fail "Could not install the launcher into $APP_DIR/bin/twinforge." \
+      "Check who owns that file (an earlier run under sudo is the usual cause), then re-run this script."
   # Not `2>/dev/null || true`. When this genuinely failed — foreign ownership
   # from an earlier sudo run, a read-only mount, a restrictive ACL — the script
   # carried on, wrote the marker, and printed "installed", and the developer got
@@ -537,7 +577,9 @@ The download may be corrupted or tampered with. Try again, and if it keeps happe
   [ -x "$APP_DIR/bin/twinforge" ] \
     || fail "$APP_DIR/bin/twinforge is still not executable after chmod." \
       "A filesystem mounted noexec, or an ACL denying execution, would do this. Fix that and re-run this script."
-  touch "$INSTALLED_MARKER"
+  touch "$INSTALLED_MARKER" \
+    || fail "TwinForge $VERSION is installed, but the marker at $INSTALLED_MARKER could not be written, so re-running would download it all over again." \
+      "Check that $VERSION_DIR is writable, then re-run this script."
 
   point_current "$VERSION_DIR"
   add_bin_to_path
