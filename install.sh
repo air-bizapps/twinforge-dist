@@ -49,25 +49,149 @@ select_sha256_tool() {
   fi
 }
 
-# --- Manifest helpers ---------------------------------------------------------
-# Deliberately hand-rolled instead of requiring jq: the manifest is our own
-# fixed, flat shape, and only pulling the two or three fields we need means an
-# unrelated field the manifest grows later cannot break an installer already
-# in the wild.
-
-manifest_get_top() {
-  # $1 manifest file, $2 key name -> string value (first match, top-level)
-  grep -o "\"$2\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" "$1" \
-    | head -1 \
-    | sed -E "s/.*\"$2\"[[:space:]]*:[[:space:]]*\"([^\"]*)\"/\\1/"
+# --- Manifest parsing ---------------------------------------------------------
+# Still no jq — it is not guaranteed present, and requiring it would turn a
+# missing package into a failed install. What is required is awk, which POSIX
+# mandates and which this script already used for the checksum.
+#
+# The previous version selected the platform block with a `sed` line range and
+# then took the first `url`/`sha256` in it. That is only correct if the manifest
+# is pretty-printed one key per line. Reproduced on a `jq -c` manifest: the
+# range matched the whole document, so a Mac got the *first* url and the *first*
+# sha256 in the file — the linux-x64 pair. Both fields came from the same wrong
+# block, so they agreed, the checksum verified, extraction succeeded, and the
+# installer reported success while installing another platform's tarball. No
+# attacker needed: anyone regenerating the manifest without an indent argument.
+#
+# So the manifest is scanned as JSON — whitespace-independent, depth-aware,
+# and loud on anything malformed rather than helpfully returning a neighbour's
+# value. `version` is read at the top level only (the old grep took the first
+# match anywhere, so a `version` nested inside an earlier artifact object won,
+# despite the comment claiming top-level), and url/sha256 only from
+# artifacts.<platform>. Keys are joined with SUBSEP, a byte a valid JSON key
+# cannot contain, so no key can spell out another key's path.
+#
+# Values come back with their JSON escapes intact rather than unescaped: every
+# field this script reads is then checked against a character class that no
+# escape sequence can pass, so unescaping would only add a way to smuggle a
+# newline or a quote into a value.
+manifest_scan() {
+  # $1 manifest file, $2 platform tag
+  # -> "<field>\t<value>" lines for version, url and sha256, in file order.
+  # Exits 2 after an "error\t<what>" line if the document is not well-formed.
+  awk -v platform="$2" '
+    function fatal(msg) {
+      printf("error\t%s\n", msg)
+      exit 2
+    }
+    function ws(   c) {
+      while (i <= n) {
+        c = substr(doc, i, 1)
+        if (c == " " || c == "\t" || c == "\n" || c == "\r") i++
+        else break
+      }
+    }
+    function at() {
+      if (i > n) fatal("it ends in the middle of a value")
+      return substr(doc, i, 1)
+    }
+    function parse_string(   out, c) {
+      if (at() != "\"") fatal("expected a string at byte " i)
+      i++
+      out = ""
+      while (i <= n) {
+        c = substr(doc, i, 1)
+        if (c == "\\") { out = out c substr(doc, i + 1, 1); i += 2; continue }
+        if (c == "\"") { i++; return out }
+        if (c < " ") fatal("a string contains an unescaped control character at byte " i)
+        out = out c
+        i++
+      }
+      fatal("a string is never closed")
+    }
+    function parse_scalar(   start) {
+      start = i
+      while (i <= n) {
+        c = substr(doc, i, 1)
+        if (c == "," || c == "}" || c == "]" || c == " " || c == "\t" || c == "\n" || c == "\r") break
+        i++
+      }
+      if (i == start) fatal("unexpected character at byte " i)
+    }
+    function parse_array(path,   c) {
+      i++
+      ws()
+      if (at() == "]") { i++; return }
+      for (;;) {
+        parse_value(path SUBSEP "[]")
+        ws()
+        c = at()
+        if (c == ",") { i++; continue }
+        if (c == "]") { i++; return }
+        fatal("expected , or ] in an array at byte " i)
+      }
+    }
+    function parse_object(path,   key, child, c) {
+      i++
+      ws()
+      if (at() == "}") { i++; return }
+      for (;;) {
+        ws()
+        key = parse_string()
+        child = (path == "") ? key : path SUBSEP key
+        ws()
+        if (at() != ":") fatal("expected : after the key " key)
+        i++
+        parse_value(child)
+        ws()
+        c = at()
+        if (c == ",") { i++; continue }
+        if (c == "}") { i++; return }
+        fatal("expected , or } in an object at byte " i)
+      }
+    }
+    function parse_value(path,   c) {
+      ws()
+      c = at()
+      if (c == "{") { parse_object(path); return }
+      if (c == "[") { parse_array(path); return }
+      if (c == "\"") { emit(path, parse_string()); return }
+      parse_scalar(path)
+    }
+    function emit(path, value) {
+      if (path == "version") printf("version\t%s\n", value)
+      else if (path == want_url) printf("url\t%s\n", value)
+      else if (path == want_sha) printf("sha256\t%s\n", value)
+    }
+    BEGIN {
+      want_url = "artifacts" SUBSEP platform SUBSEP "url"
+      want_sha = "artifacts" SUBSEP platform SUBSEP "sha256"
+    }
+    { doc = doc $0 "\n" }
+    END {
+      n = length(doc)
+      i = 1
+      ws()
+      if (i > n) fatal("it is empty")
+      if (at() != "{") fatal("it is not a JSON object")
+      parse_object("")
+      ws()
+      if (i <= n) fatal("there is content after the end of the top-level object")
+    }
+  ' "$1"
 }
 
-manifest_get_artifact_field() {
-  # $1 manifest file, $2 platform tag, $3 field name -> string value
-  sed -n "/\"$2\"[[:space:]]*:[[:space:]]*{/,/}/p" "$1" \
-    | grep -o "\"$3\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" \
-    | head -1 \
-    | sed -E "s/.*\"$3\"[[:space:]]*:[[:space:]]*\"([^\"]*)\"/\\1/"
+manifest_field() {
+  # $1 scan output, $2 field name -> the one value, or exit 1 if declared twice.
+  # Declared twice is a hard error, not a last-one-wins: two answers to the
+  # same question is exactly the shape of a manifest someone has edited.
+  awk -F '\t' -v k="$2" '
+    $1 == k { count++; value = $2 }
+    END {
+      if (count > 1) exit 1
+      if (count == 1) print value
+    }
+  ' "$1"
 }
 
 # The artifact URL is remote input, and it reaches `curl` in option position.
@@ -206,7 +330,15 @@ main() {
 Check your network connection, and that TWINFORGE_CHANNEL=$CHANNEL names a real channel."
   fi
 
-  VERSION="$(manifest_get_top "$MANIFEST_FILE" version)"
+  MANIFEST_FIELDS="$WORK_DIR/fields.tsv"
+  if ! manifest_scan "$MANIFEST_FILE" "$PLATFORM_TAG" > "$MANIFEST_FIELDS"; then
+    fail "Could not read the channel manifest at $MANIFEST_URL: $(sed -n 's/^error	//p' "$MANIFEST_FIELDS" | head -1).
+It is not the JSON document this installer expects. Report it — a manifest this
+installer cannot read is a publishing bug, not something to work around."
+  fi
+
+  VERSION="$(manifest_field "$MANIFEST_FIELDS" version)" \
+    || fail "Manifest at $MANIFEST_URL declares \"version\" more than once. Refusing to guess which one is meant."
   [ -n "$VERSION" ] || fail "Manifest at $MANIFEST_URL has no \"version\" field. It may be malformed, or the channel may not exist yet."
 
   # $VERSION becomes a directory name under $APP_DIR/versions and is
@@ -218,8 +350,10 @@ Check your network connection, and that TWINFORGE_CHANNEL=$CHANNEL names a real 
     *[!A-Za-z0-9._-]*) fail "Manifest at $MANIFEST_URL declares an unusable version \"$VERSION\". Expected only letters, digits, dot, underscore and hyphen, because the version is used as a directory name. Refusing to continue." ;;
   esac
 
-  ARTIFACT_URL="$(manifest_get_artifact_field "$MANIFEST_FILE" "$PLATFORM_TAG" url)"
-  ARTIFACT_SHA256="$(manifest_get_artifact_field "$MANIFEST_FILE" "$PLATFORM_TAG" sha256)"
+  ARTIFACT_URL="$(manifest_field "$MANIFEST_FIELDS" url)" \
+    || fail "Manifest at $MANIFEST_URL declares \"url\" more than once for platform $PLATFORM_TAG. Refusing to guess which one is meant."
+  ARTIFACT_SHA256="$(manifest_field "$MANIFEST_FIELDS" sha256)" \
+    || fail "Manifest at $MANIFEST_URL declares \"sha256\" more than once for platform $PLATFORM_TAG. Refusing to guess which one is meant."
   if [ -z "$ARTIFACT_URL" ] || [ -z "$ARTIFACT_SHA256" ]; then
     fail "Manifest at $MANIFEST_URL has no artifact for platform $PLATFORM_TAG."
   fi
