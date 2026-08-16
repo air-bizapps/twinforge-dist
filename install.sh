@@ -440,17 +440,25 @@ The download may be corrupted or tampered with. Try again, and if it keeps happe
   [ -d "$EXTRACT_DIR/$VERSION" ] || fail "Downloaded archive does not contain a $VERSION directory. This looks like a packaging bug, not a network problem — please report it."
   [ -d "$EXTRACT_DIR/bin" ] || fail "Downloaded archive has no bin/ directory. This looks like a packaging bug, not a network problem — please report it."
 
+  mkdir -p "$VERSIONS_DIR"
   # A previous run may have been interrupted after $VERSION_DIR was created but
   # before the marker was written. `mv` onto an existing directory would nest
   # into it instead of replacing it, so clear that stale, unmarked state first.
   rm -rf "$VERSION_DIR"
 
-  mkdir -p "$VERSIONS_DIR" "$APP_DIR/bin"
-  # bin/ is populated, and the marker written, only after the version directory
-  # is committed below — see INSTALLED_MARKER above for why the ordering matters.
+  # The payload is committed first, then bin/, then the marker that says both
+  # are there. bin/ is shared across every installed version, so writing it
+  # first replaces the launcher of the install that currently works — and the
+  # move that follows is the step most likely to fail, because $EXTRACT_DIR is
+  # under $TMPDIR and $VERSION_DIR under $HOME, usually different filesystems,
+  # which makes it a multi-hundred-MiB copy rather than a rename. Losing it
+  # (disk full, realistically) after bin/ had already been replaced left the
+  # machine with the new launcher over the old payload, `current` still pointing
+  # at the old version, and no marker.
+  mv "$EXTRACT_DIR/$VERSION" "$VERSION_DIR"
+  mkdir -p "$APP_DIR/bin"
   cp -R "$EXTRACT_DIR/bin/." "$APP_DIR/bin/"
   chmod +x "$APP_DIR/bin/twinforge" 2>/dev/null || true
-  mv "$EXTRACT_DIR/$VERSION" "$VERSION_DIR"
   touch "$INSTALLED_MARKER"
 
   point_current "$VERSION_DIR"
