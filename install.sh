@@ -70,6 +70,40 @@ manifest_get_artifact_field() {
     | sed -E "s/.*\"$3\"[[:space:]]*:[[:space:]]*\"([^\"]*)\"/\\1/"
 }
 
+# The artifact URL is remote input, and it reaches `curl` in option position.
+# Two separate problems, both closed here:
+#
+#   1. A value starting with `-` is read by curl as an *option*. A manifest
+#      whose url is `-Kcfg.txt` makes curl read a config file from the
+#      developer's working directory instead of downloading anything —
+#      honouring its `output =` and `url =` directives — and exit 0, so the
+#      caller's error check sees a successful download. The checksum is no
+#      defence: this changes what curl *does*, not what it downloads. `--`
+#      before the URL in the calls below closes the option-position half.
+#   2. curl accepts every scheme libcurl was built with. `file:///dev/zero`
+#      wrote 6.8 GB in five seconds here before it was killed.
+#
+# So the URL is required to be https:// — the same rule, and the same message,
+# that the updater applies in the monorepo (packaging/updater/check-for-update.mjs,
+# `assertHttpsUrl`), so a manifest that one accepts the other accepts too.
+assert_https_url() {
+  # $1 url, $2 the manifest URL it came from, $3 the version it is for
+  case "$1" in
+    # Rejected before the scheme check so the message can be specific: a URL
+    # with whitespace or control characters in it is not a URL, and it is also
+    # how a manifest would try to forge extra lines into the messages below.
+    *[!!-~]*)
+      fail "Manifest at $2 points $3 at a URL containing whitespace or control characters. Refusing to continue."
+      ;;
+  esac
+  case "$1" in
+    [Hh][Tt][Tt][Pp][Ss]://?*) ;;
+    *)
+      fail "Manifest at $2 points $3 at \"$1\". Releases are downloaded over https:// only. Refusing to continue."
+      ;;
+  esac
+}
+
 point_current() {
   ln -sfn "$1" "$APP_DIR/current"
 }
@@ -156,7 +190,18 @@ main() {
   MANIFEST_FILE="$WORK_DIR/manifest.json"
 
   echo "Fetching the $CHANNEL channel manifest..."
-  if ! curl -fsSL "$MANIFEST_URL" -o "$MANIFEST_FILE"; then
+  # 30 s end to end, matching MANIFEST_TIMEOUT_MS in the monorepo's updater:
+  # this is a JSON document of a few hundred bytes, so 30 s is many times what
+  # it needs on any link a developer can work on, and it bounds a server that
+  # dribbles a byte at a time — which no inactivity default catches, because
+  # such a connection is never idle. 1 MiB is ~500x the real manifest and still
+  # small enough that the parser below stays instant.
+  #
+  # Not https-only, unlike the artifact URL: $BASE_URL is a documented local
+  # override (TWINFORGE_DIST_BASE_URL), set by the person running the script,
+  # not a value the manifest gets to choose.
+  if ! curl -fsSL --connect-timeout 10 --max-time 30 --max-filesize 1048576 \
+      -o "$MANIFEST_FILE" -- "$MANIFEST_URL"; then
     fail "Could not download the channel manifest from $MANIFEST_URL
 Check your network connection, and that TWINFORGE_CHANNEL=$CHANNEL names a real channel."
   fi
@@ -178,6 +223,7 @@ Check your network connection, and that TWINFORGE_CHANNEL=$CHANNEL names a real 
   if [ -z "$ARTIFACT_URL" ] || [ -z "$ARTIFACT_SHA256" ]; then
     fail "Manifest at $MANIFEST_URL has no artifact for platform $PLATFORM_TAG."
   fi
+  assert_https_url "$ARTIFACT_URL" "$MANIFEST_URL" "$VERSION"
 
   VERSIONS_DIR="$APP_DIR/versions"
   VERSION_DIR="$VERSIONS_DIR/$VERSION"
@@ -203,8 +249,17 @@ Check your network connection, and that TWINFORGE_CHANNEL=$CHANNEL names a real 
   # --- Download, verify, then extract ----------------------------------------
 
   TARBALL="$WORK_DIR/twinforge.tar.gz"
-  echo "Downloading TwinForge $VERSION for $PLATFORM_TAG..."
-  if ! curl -fsSL "$ARTIFACT_URL" -o "$TARBALL"; then
+  echo "Downloading TwinForge $VERSION for $PLATFORM_TAG... (a few hundred MiB; no progress is shown)"
+  # 30 minutes and 512 MiB, the same two numbers the monorepo's downloader uses
+  # (DOWNLOAD_TIMEOUT_MS / DOWNLOAD_MAX_BYTES in packaging/release-fetch.mjs).
+  # The real release artifact is 223 MiB: 30 minutes needs 127 KiB/s (~1 Mbit/s)
+  # sustained to clear it, which is well under anything a developer can work on,
+  # and 512 MiB is over twice the largest artifact this project ships. --proto
+  # keeps a redirect from walking off https:// after assert_https_url has had
+  # its say.
+  if ! curl -fsSL --proto '=https' --proto-redir '=https' \
+      --connect-timeout 30 --max-time 1800 --max-filesize 536870912 \
+      -o "$TARBALL" -- "$ARTIFACT_URL"; then
     fail "Download failed: $ARTIFACT_URL
 Check your network connection and try again."
   fi
