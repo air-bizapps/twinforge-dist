@@ -243,18 +243,72 @@ point_current() {
   ln -sfn "$1" "$APP_DIR/current"
 }
 
+# Which startup file does this shell actually read? Prints it, or prints
+# nothing when there is no answer worth defending.
+#
+# The old three-way case got this wrong three ways, and then printed that the
+# PATH had been set up regardless: bash went to ~/.bashrc, which macOS Terminal
+# never reads because it opens bash as a *login* shell; an unset or unrecognised
+# $SHELL went to ~/.profile, which fish never reads and which $SHELL being empty
+# in containers and CI made the common case rather than the rare one; and the
+# chosen file was created if absent, so a machine whose ~/.bash_profile does not
+# source ~/.bashrc got a brand new, permanently dead ~/.bashrc.
+path_profile_file() {
+  case "${SHELL:-}" in
+    */zsh)
+      # zsh reads .zshrc for every interactive shell, login or not, and
+      # creating it shadows nothing.
+      say "$HOME/.zshrc"
+      ;;
+    */bash)
+      if [ "$os_tag" = darwin ]; then
+        # Terminal and iTerm open login shells, which read the first of
+        # .bash_profile, .bash_login, .profile that exists and stop there. So
+        # append to whichever that is — and only create .bash_profile when none
+        # of them exists, because creating it in front of an existing .profile
+        # would stop .profile being read at all.
+        if [ -f "$HOME/.bash_profile" ]; then say "$HOME/.bash_profile"
+        elif [ -f "$HOME/.bash_login" ]; then say "$HOME/.bash_login"
+        elif [ -f "$HOME/.profile" ]; then say "$HOME/.profile"
+        else say "$HOME/.bash_profile"
+        fi
+      else
+        # On Linux the interactive shell a developer gets from a terminal is
+        # non-login, and reads .bashrc.
+        say "$HOME/.bashrc"
+      fi
+      ;;
+    */sh | */dash | */ksh | */ksh93 | */mksh)
+      say "$HOME/.profile"
+      ;;
+    *)
+      # fish, nushell, an unset $SHELL, something newer than this script. Any
+      # guess here is a promise that is false about half the time, and a wrong
+      # promise is worse than none: say so, and hand over the exact line.
+      ;;
+  esac
+}
+
 add_bin_to_path() {
   bin_dir="$APP_DIR/bin"
-  case "${SHELL:-}" in
-    */zsh) profile="$HOME/.zshrc" ;;
-    */bash) profile="$HOME/.bashrc" ;;
-    *) profile="$HOME/.profile" ;;
-  esac
+  path_line="export PATH=\"$bin_dir:\$PATH\""
+  profile="$(path_profile_file)"
+
+  if [ -z "$profile" ]; then
+    say "" \
+      "TwinForge did not change your PATH: SHELL is \"${SHELL:-unset}\", and this" \
+      "script does not know which startup file that shell reads. Add this line to" \
+      "it yourself:" \
+      "" \
+      "  $path_line"
+    return 0
+  fi
+
   if [ -f "$profile" ] && grep -qF "$bin_dir" "$profile" 2>/dev/null; then
     return 0
   fi
-  printf '\n# Added by the TwinForge installer\n%s\n' "export PATH=\"$bin_dir:\$PATH\"" >> "$profile"
-  say "Added $bin_dir to PATH in $profile (open a new shell, or run: export PATH=\"$bin_dir:\$PATH\")"
+  printf '\n# Added by the TwinForge installer\n%s\n' "$path_line" >> "$profile"
+  say "Added $bin_dir to PATH in $profile (open a new shell, or run: $path_line)"
 }
 
 print_next_steps() {
