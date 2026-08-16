@@ -406,7 +406,16 @@ main() {
   # --- Fetch and read the channel manifest -----------------------------------
 
   WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/twinforge-install.XXXXXX")"
-  trap cleanup EXIT INT TERM
+  # INT and TERM re-raise rather than just running cleanup and returning. A
+  # handler that returns hands control back to the shell, which carries on with
+  # the next command — so a Ctrl-C landing between two commands was absorbed
+  # entirely and the install continued, with its temp directory already deleted.
+  # Removing the handler and killing ourselves with the same signal is what
+  # makes the script die of it, and gives the caller the 128+n status that says
+  # so.
+  trap cleanup EXIT
+  trap 'cleanup; trap - INT EXIT; kill -INT $$' INT
+  trap 'cleanup; trap - TERM EXIT; kill -TERM $$' TERM
 
   MANIFEST_URL="$BASE_URL/channels/$CHANNEL.json"
   MANIFEST_FILE="$WORK_DIR/manifest.json"
