@@ -29,8 +29,19 @@
 # file cut in the middle of a top-level `set -eu` leaves a bare `set` as its
 # last complete statement, which dumps the whole environment to stdout.
 
+# printf, never echo. Under dash — /bin/sh on Debian and Ubuntu, so most of the
+# audience — and under macOS /bin/sh, `echo` expands backslash escapes in its
+# argument. The messages below interpolate $ARTIFACT_URL and $ARTIFACT_SHA256
+# straight from the manifest, so a `url` containing \c truncates the rest of the
+# message under dash, deleting exactly the line "The download may be corrupted
+# or tampered with", and \n injects lines that read like success. Confirmed on
+# both shells. Every message this script emits goes through these two.
+say() {
+  printf '%s\n' "$@"
+}
+
 fail() {
-  echo "$1" >&2
+  printf '%s\n' "$@" >&2
   exit 1
 }
 
@@ -243,7 +254,7 @@ add_bin_to_path() {
     return 0
   fi
   printf '\n# Added by the TwinForge installer\n%s\n' "export PATH=\"$bin_dir:\$PATH\"" >> "$profile"
-  echo "Added $bin_dir to PATH in $profile (open a new shell, or run: export PATH=\"$bin_dir:\$PATH\")"
+  say "Added $bin_dir to PATH in $profile (open a new shell, or run: export PATH=\"$bin_dir:\$PATH\")"
 }
 
 print_next_steps() {
@@ -299,9 +310,8 @@ main() {
   case "$PLATFORM_TAG" in
     darwin-arm64 | linux-x64) ;;
     *)
-      echo "Unsupported platform: $os/$arch" >&2
-      echo "Supported platforms: darwin-arm64, linux-x64. On Windows, run install.ps1 instead." >&2
-      exit 1
+      fail "Unsupported platform: $os/$arch" \
+        "Supported platforms: darwin-arm64, linux-x64. On Windows, run install.ps1 instead."
       ;;
   esac
 
@@ -313,7 +323,7 @@ main() {
   MANIFEST_URL="$BASE_URL/channels/$CHANNEL.json"
   MANIFEST_FILE="$WORK_DIR/manifest.json"
 
-  echo "Fetching the $CHANNEL channel manifest..."
+  say "Fetching the $CHANNEL channel manifest..."
   # 30 s end to end, matching MANIFEST_TIMEOUT_MS in the monorepo's updater:
   # this is a JSON document of a few hundred bytes, so 30 s is many times what
   # it needs on any link a developer can work on, and it bounds a server that
@@ -373,7 +383,7 @@ installer cannot read is a publishing bug, not something to work around."
   # after a fully successful install too — the marker alone can't see that.
 
   if [ -f "$INSTALLED_MARKER" ] && [ -x "$APP_DIR/bin/twinforge" ]; then
-    echo "TwinForge $VERSION is already installed."
+    say "TwinForge $VERSION is already installed."
     point_current "$VERSION_DIR"
     add_bin_to_path
     print_next_steps
@@ -383,7 +393,7 @@ installer cannot read is a publishing bug, not something to work around."
   # --- Download, verify, then extract ----------------------------------------
 
   TARBALL="$WORK_DIR/twinforge.tar.gz"
-  echo "Downloading TwinForge $VERSION for $PLATFORM_TAG... (a few hundred MiB; no progress is shown)"
+  say "Downloading TwinForge $VERSION for $PLATFORM_TAG... (a few hundred MiB; no progress is shown)"
   # 30 minutes and 512 MiB, the same two numbers the monorepo's downloader uses
   # (DOWNLOAD_TIMEOUT_MS / DOWNLOAD_MAX_BYTES in packaging/release-fetch.mjs).
   # The real release artifact is 223 MiB: 30 minutes needs 127 KiB/s (~1 Mbit/s)
