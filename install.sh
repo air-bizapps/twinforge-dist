@@ -523,7 +523,20 @@ The download may be corrupted or tampered with. Try again, and if it keeps happe
   # every shell. Naming the one file also means an upgrade or downgrade cannot
   # leave a stale launcher behind, which a merging `cp -R` never pruned.
   cp "$EXTRACT_DIR/bin/twinforge" "$APP_DIR/bin/twinforge"
-  chmod +x "$APP_DIR/bin/twinforge" 2>/dev/null || true
+  # Not `2>/dev/null || true`. When this genuinely failed — foreign ownership
+  # from an earlier sudo run, a read-only mount, a restrictive ACL — the script
+  # carried on, wrote the marker, and printed "installed", and the developer got
+  # `permission denied` from the first command they ran. Worse: the marker was
+  # then set while the [ -x ] half of the short-circuit at the top stayed false,
+  # so every re-run re-downloaded the whole artifact and ended in the same
+  # place. The [ -x ] test is repeated after chmod because an ACL can deny
+  # execution even where chmod itself succeeds.
+  chmod +x "$APP_DIR/bin/twinforge" \
+    || fail "Could not make $APP_DIR/bin/twinforge executable." \
+      "Check who owns $APP_DIR/bin (an earlier run under sudo is the usual cause) and that its filesystem is writable, then re-run this script."
+  [ -x "$APP_DIR/bin/twinforge" ] \
+    || fail "$APP_DIR/bin/twinforge is still not executable after chmod." \
+      "A filesystem mounted noexec, or an ACL denying execution, would do this. Fix that and re-run this script."
   touch "$INSTALLED_MARKER"
 
   point_current "$VERSION_DIR"
