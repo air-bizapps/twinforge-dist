@@ -291,7 +291,12 @@ path_profile_file() {
 
 add_bin_to_path() {
   bin_dir="$APP_DIR/bin"
-  path_line="export PATH=\"$bin_dir:\$PATH\""
+  # Appended, not prepended, and matching install.ps1:73, which appends. This
+  # directory is filled from a downloaded archive: putting it first would let a
+  # release containing bin/git, bin/ssh or bin/sudo take over those commands for
+  # every interactive shell the developer opens afterwards, forever. Last means
+  # it can add the launcher without being able to replace anything.
+  path_line="export PATH=\"\$PATH:$bin_dir\""
   profile="$(path_profile_file)"
 
   if [ -z "$profile" ]; then
@@ -492,7 +497,7 @@ The download may be corrupted or tampered with. Try again, and if it keeps happe
   tar -xzf "$TARBALL" -C "$EXTRACT_DIR" || fail "Could not extract $TARBALL. The archive may be corrupted; try again."
 
   [ -d "$EXTRACT_DIR/$VERSION" ] || fail "Downloaded archive does not contain a $VERSION directory. This looks like a packaging bug, not a network problem — please report it."
-  [ -d "$EXTRACT_DIR/bin" ] || fail "Downloaded archive has no bin/ directory. This looks like a packaging bug, not a network problem — please report it."
+  [ -f "$EXTRACT_DIR/bin/twinforge" ] || fail "Downloaded archive has no bin/twinforge launcher. This looks like a packaging bug, not a network problem — please report it."
 
   mkdir -p "$VERSIONS_DIR"
   # A previous run may have been interrupted after $VERSION_DIR was created but
@@ -511,7 +516,13 @@ The download may be corrupted or tampered with. Try again, and if it keeps happe
   # at the old version, and no marker.
   mv "$EXTRACT_DIR/$VERSION" "$VERSION_DIR"
   mkdir -p "$APP_DIR/bin"
-  cp -R "$EXTRACT_DIR/bin/." "$APP_DIR/bin/"
+  # Only the launcher, not `cp -R bin/.`. bin/ holds exactly one file —
+  # packaging/build-release-tarball.mjs writes bin/twinforge and nothing else —
+  # so copying the directory wholesale gained nothing and accepted whatever a
+  # future archive happened to contain into a directory that is on the PATH of
+  # every shell. Naming the one file also means an upgrade or downgrade cannot
+  # leave a stale launcher behind, which a merging `cp -R` never pruned.
+  cp "$EXTRACT_DIR/bin/twinforge" "$APP_DIR/bin/twinforge"
   chmod +x "$APP_DIR/bin/twinforge" 2>/dev/null || true
   touch "$INSTALLED_MARKER"
 
