@@ -369,6 +369,23 @@ installer cannot read is a publishing bug, not something to work around."
   fi
   assert_https_url "$ARTIFACT_URL" "$MANIFEST_URL" "$VERSION"
 
+  # The hash is compared case-insensitively, and its shape is checked before
+  # it is used. install.ps1 already lowercases both sides, because Get-FileHash
+  # returns uppercase while sha256sum and shasum return lowercase; comparing raw
+  # here meant the two installers disagreed about the manifest's contract. A
+  # hash computed on a Windows runner would have kept every Windows install
+  # working and aborted every macOS and Linux one with "corrupted or tampered
+  # with" — release engineering chasing a supply-chain incident that never
+  # happened. Nothing validated the field's shape either, so a truncated or
+  # empty-ish hash reached the comparison as a plausible-looking mismatch.
+  case "$ARTIFACT_SHA256" in
+    *[!0-9A-Fa-f]*)
+      fail "Manifest at $MANIFEST_URL gives platform $PLATFORM_TAG a \"sha256\" that is not hexadecimal. Refusing to continue."
+      ;;
+  esac
+  [ "${#ARTIFACT_SHA256}" -eq 64 ] || fail "Manifest at $MANIFEST_URL gives platform $PLATFORM_TAG a \"sha256\" of ${#ARTIFACT_SHA256} characters. A sha256 is 64. Refusing to continue."
+  ARTIFACT_SHA256="$(printf '%s' "$ARTIFACT_SHA256" | tr 'ABCDEF' 'abcdef')"
+
   VERSIONS_DIR="$APP_DIR/versions"
   VERSION_DIR="$VERSIONS_DIR/$VERSION"
   # Written only after the version directory AND bin/ are both fully in place.
@@ -408,7 +425,7 @@ installer cannot read is a publishing bug, not something to work around."
 Check your network connection and try again."
   fi
 
-  ACTUAL_SHA256="$(sha256_of "$TARBALL")"
+  ACTUAL_SHA256="$(sha256_of "$TARBALL" | tr 'ABCDEF' 'abcdef')"
   if [ "$ACTUAL_SHA256" != "$ARTIFACT_SHA256" ]; then
     fail "Checksum mismatch for $ARTIFACT_URL
   expected $ARTIFACT_SHA256
