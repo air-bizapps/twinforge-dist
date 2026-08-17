@@ -50,11 +50,18 @@ need_cmd() {
 }
 
 # Defines sha256_of() against whichever of the two tools this machine has.
+#
+# The file arrives on stdin rather than as an argument. Given a path containing
+# a backslash or a newline — $TMPDIR is whatever the environment says it is —
+# both tools escape the filename and prefix the whole line with a backslash, so
+# `awk {print $1}` returns \<hash>, which then fails the comparison with the
+# tampering warning. Reading stdin means there is no filename in the output to
+# escape.
 select_sha256_tool() {
   if command -v sha256sum >/dev/null 2>&1; then
-    sha256_of() { sha256sum "$1" | awk '{print $1}'; }
+    sha256_of() { sha256sum < "$1" | awk '{print $1}'; }
   elif command -v shasum >/dev/null 2>&1; then
-    sha256_of() { shasum -a 256 "$1" | awk '{print $1}'; }
+    sha256_of() { shasum -a 256 < "$1" | awk '{print $1}'; }
   else
     fail "Need sha256sum or shasum to verify the download. Install one and re-run."
   fi
@@ -321,7 +328,12 @@ add_bin_to_path() {
     return 0
   fi
 
-  if [ -f "$profile" ] && grep -qF "$bin_dir" "$profile" 2>/dev/null; then
+  # The exact line, not a substring of it. `grep -qF "$bin_dir"` matched the
+  # directory anywhere in the file — inside a comment, inside an unrelated
+  # PATH — while missing the same line written with $HOME unexpanded, so the
+  # second run appended a duplicate. Matching the whole line against the line
+  # this script writes is exact for the case that matters: its own second run.
+  if [ -f "$profile" ] && grep -qxF "$path_line" "$profile" 2>/dev/null; then
     return 0
   fi
   # This one must never fail the install. It runs after everything is installed
@@ -366,6 +378,13 @@ cleanup() {
 main() {
   set -eu
 
+  # C, not the user's locale. Every character class below (the version name,
+  # the hash, the URL) is collated by the locale otherwise, so what counts as
+  # A-Z or as a printable character stops being a fixed set — and grep, sed and
+  # awk stop being deterministic across the machines this runs on.
+  LC_ALL=C
+  export LC_ALL
+
   CHANNEL="${TWINFORGE_CHANNEL:-canary}"
   BASE_URL="${TWINFORGE_DIST_BASE_URL:-https://raw.githubusercontent.com/air-bizapps/twinforge-dist/main}"
 
@@ -373,7 +392,20 @@ main() {
   need_cmd tar
   need_cmd mktemp
   need_cmd uname
+  need_cmd id
   select_sha256_tool
+
+  # `sudo sh -c "$(curl ...)"` is a thing people do to installers, and this one
+  # would have gone along with it: $HOME is root's, so it installs into
+  # /root/.twinforge, adds the PATH line to root's profile, and reports success
+  # — leaving the developer with nothing on their own account. Being root
+  # inside a container image is different and stays allowed; $SUDO_USER is what
+  # separates the two.
+  if [ "$(id -u)" -eq 0 ] && [ -n "${SUDO_USER:-}" ]; then
+    fail "Do not install TwinForge with sudo." \
+      "It installs into \$HOME, which under sudo is root's: the files would land in /root/.twinforge and the PATH line in root's profile, and ${SUDO_USER} would end up with nothing." \
+      "Re-run this script as ${SUDO_USER}, without sudo."
+  fi
 
   [ -n "${HOME:-}" ] || fail "\$HOME is not set. TwinForge needs it to know where to install."
   TWINFORGE_HOME_DIR="${TWINFORGE_HOME:-$HOME/.twinforge}"
@@ -533,7 +565,12 @@ The download may be corrupted or tampered with. Try again, and if it keeps happe
   EXTRACT_DIR="$WORK_DIR/extracted"
   mkdir -p "$EXTRACT_DIR" \
     || fail "Could not create the extraction directory at $EXTRACT_DIR."
-  tar -xzf "$TARBALL" -C "$EXTRACT_DIR" || fail "Could not extract $TARBALL. The archive may be corrupted; try again."
+  # --no-same-owner / --no-same-permissions: GNU tar running as root restores
+  # ownership and setuid bits straight from the archive. Root is refused above
+  # when it came from sudo, but a container image building as root is a real and
+  # supported case, and there the flags are what keep an archive from deciding
+  # who owns the extracted tree.
+  tar -xzf "$TARBALL" --no-same-owner --no-same-permissions -C "$EXTRACT_DIR" || fail "Could not extract $TARBALL. The archive may be corrupted; try again."
 
   [ -d "$EXTRACT_DIR/$VERSION" ] || fail "Downloaded archive does not contain a $VERSION directory. This looks like a packaging bug, not a network problem — please report it."
   [ -f "$EXTRACT_DIR/bin/twinforge" ] || fail "Downloaded archive has no bin/twinforge launcher. This looks like a packaging bug, not a network problem — please report it."
