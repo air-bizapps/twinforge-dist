@@ -112,11 +112,17 @@ function Assert-ManifestUrl([string]$Url) {
 
 $Channel = if ($env:TWINFORGE_CHANNEL) { $env:TWINFORGE_CHANNEL } else { "canary" }
 $BaseUrl = if ($env:TWINFORGE_DIST_BASE_URL) { $env:TWINFORGE_DIST_BASE_URL } else { "https://raw.githubusercontent.com/air-bizapps/twinforge-dist/main" }
-$HomeDir = if ($env:TWINFORGE_HOME) { $env:TWINFORGE_HOME } else { Join-Path $env:USERPROFILE ".twinforge" }
-$AppDir = Join-Path $HomeDir "app"
 
 # --- Platform detection -------------------------------------------------------
 # v1 supports win-x64 only (see docs/superpowers/specs/2026-08-15-distribuicao-e-update-design.md, E3).
+
+# The OS was never checked, only the architecture. Under pwsh on Linux or macOS
+# the x64 check passes, %USERPROFILE% is $null, and the script proceeds to
+# install into a path built from nothing. RuntimeInformation is already the type
+# the architecture check uses, so this adds no dependency.
+if (-not [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::Windows)) {
+    Fail "This installer is for Windows.`nOn macOS and Linux, run install.sh instead:`n  curl -fsSL https://raw.githubusercontent.com/air-bizapps/twinforge-dist/main/install.sh | sh"
+}
 
 $arch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture
 if ($arch -ne [System.Runtime.InteropServices.Architecture]::X64) {
@@ -141,6 +147,48 @@ if (-not $TarCommand) {
     Fail "Could not find tar.exe on your PATH.`nThe release artifact is a .tar.gz, and tar has shipped with Windows since 10 1803 and Server 2019. If you are on an older build, install it (or add %SystemRoot%\System32 back to your PATH) and re-run this script."
 }
 $TarExe = $TarCommand.Source
+
+# --- Install root ---------------------------------------------------------------
+# Checked rather than assumed: install.sh refuses to guess when $HOME is unset,
+# and %USERPROFILE% is empty often enough on service accounts and in stripped
+# container images for the same refusal to be worth making here.
+if ((-not $env:TWINFORGE_HOME) -and (-not $env:USERPROFILE)) {
+    Fail "%USERPROFILE% is not set, so there is nowhere to install to.`nSet TWINFORGE_HOME to the directory you want TwinForge installed under, and re-run this script."
+}
+$HomeDir = if ($env:TWINFORGE_HOME) { $env:TWINFORGE_HOME } else { Join-Path $env:USERPROFILE ".twinforge" }
+$AppDir = Join-Path $HomeDir "app"
+
+# --- Transport ------------------------------------------------------------------
+# Windows PowerShell 5.1 on an image that has not been updated negotiates
+# whatever ServicePointManager was left defaulted to, and TLS 1.2 is not always
+# in it. Reaching the default host at all then fails with a bare
+# "underlying connection was closed". It does not bite the documented
+# `irm ... | iex` entry point — irm has already negotiated by the time this
+# runs — but it does bite the file saved and run later, which is how it will be
+# used on locked-down images.
+#
+# Not restored afterwards, unlike $ProgressPreference: this is a process-wide
+# static with no scope to restore into, and the assignment only ever *adds* a
+# protocol to the allowed set. Nothing the developer had is taken away.
+#
+# Windows PowerShell only. On PowerShell 7 this property is a .NET Framework
+# leftover that the HttpClient stack behind Invoke-WebRequest does not consult,
+# and its default there is SystemDefault (0) — so writing Tls12 into it would,
+# if anything ever did read it, *narrow* a runtime that already negotiates TLS
+# 1.3. Not touching it is the conservative answer for the runtime that does not
+# need it.
+if ($PSVersionTable.PSVersion.Major -le 5) {
+    try {
+        $SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol
+        if (($SecurityProtocol -band [Net.SecurityProtocolType]::Tls12) -ne [Net.SecurityProtocolType]::Tls12) {
+            [Net.ServicePointManager]::SecurityProtocol = $SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+        }
+    } catch {
+        # An image too old to know the enum value cannot be helped from here,
+        # and that is not a reason to refuse to install.
+        Write-Host "Could not enable TLS 1.2; continuing with the system default."
+    }
+}
 
 # --- Manifest helpers ----------------------------------------------------------
 # The manifest is parsed into an object below, so an unrelated field the
@@ -179,15 +227,37 @@ function Get-ManifestString($Value, [string]$Field, [string]$ManifestUrl) {
 }
 
 function Set-Current([string]$Target) {
-    try {
-        $currentLink = Join-Path $AppDir "current"
-        if (Test-Path $currentLink) {
-            (Get-Item $currentLink -Force).Delete()
+    $currentLink = Join-Path $AppDir "current"
+    # Get-Item -Force rather than Test-Path. Test-Path resolves the link, so a
+    # *dangling* junction — the state a version directory removed by hand leaves
+    # behind — reads as absent: the delete was skipped and New-Item then failed
+    # with "already exists", wedging every re-run. And a `current` that is a real
+    # directory rather than a junction made .Delete() throw a raw exception right
+    # after the line saying the install was fine. install.sh's point_current
+    # refuses that case by name; this is the same refusal.
+    #
+    # UNVERIFIED: that Get-Item -Force returns the entry for a dangling junction
+    # rather than failing on it. If it does fail, this behaves as it did before
+    # and the New-Item message below is the one that has to carry the developer,
+    # which is why it names the path and says what to do.
+    $existing = Get-Item -LiteralPath $currentLink -Force -ErrorAction SilentlyContinue
+    if ($existing) {
+        if ($existing.Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
+            try {
+                # .Delete() on a junction removes the link, not what it points at.
+                $existing.Delete()
+            } catch {
+                Fail "Could not remove the existing junction at $currentLink.`n$($_.Exception.Message)"
+            }
+        } else {
+            Fail "$currentLink is a real file or directory, not a junction, so it cannot be pointed at $Target.`nMove it aside and re-run this script."
         }
+    }
+    try {
         # Junction, not symlink: symlinks need elevation on Windows, junctions do not.
         New-Item -ItemType Junction -Path $currentLink -Target $Target | Out-Null
     } catch {
-        Fail "Could not point 'current' at $Target.`n$($_.Exception.Message)"
+        Fail "Could not point 'current' at $Target.`nIf $currentLink still exists, remove it by hand and re-run this script.`n$($_.Exception.Message)"
     }
 }
 
@@ -354,38 +424,72 @@ function Write-NextSteps {
 $ManifestUrl = "$BaseUrl/channels/$Channel.json"
 Assert-ManifestUrl $ManifestUrl
 Write-Host "Fetching the $Channel channel manifest..."
-# Fetch the bytes and parse them ourselves rather than letting Invoke-RestMethod
-# decide. Invoke-RestMethod only deserializes when the response carries a JSON
-# content type, and the default host here — raw.githubusercontent.com — serves
-# .json as `text/plain; charset=utf-8` with nosniff. Under Invoke-RestMethod the
-# manifest would come back as a plain string, every property read below would be
-# $null, and the script would abort telling the developer that our manifest is
+# Parse the document ourselves rather than letting Invoke-RestMethod decide.
+# Invoke-RestMethod only deserializes when the response carries a JSON content
+# type, and the default host here — raw.githubusercontent.com — serves .json as
+# `text/plain; charset=utf-8` with nosniff. Under Invoke-RestMethod the manifest
+# would come back as a plain string, every property read below would be $null,
+# and the script would abort telling the developer that our manifest is
 # malformed — blaming the publisher for a bug on this side, on the first command
 # they ever run. Parsing unconditionally is correct for any content type the
 # host sends.
+#
+# -OutFile rather than reading .Content: the response was buffered into the
+# developer's *interactive session* with no ceiling on it, and with the progress
+# bar suppressed below a server that trickles looks exactly like a hang. Going
+# through a file gives the size something to be checked against, and drops the
+# byte[]-vs-string handling that .Content needed on 5.1.
+$ManifestFile = Join-Path ([System.IO.Path]::GetTempPath()) "twinforge-manifest-$([guid]::NewGuid()).json"
 try {
-    # -MaximumRedirection: Invoke-WebRequest follows redirects by default with
-    # no bound, so a chain can be walked as far as the server likes. Five is
-    # more than any real release host needs (raw.githubusercontent.com and the
-    # GitHub release CDN each use one).
-    #
-    # UNVERIFIED: whether a redirect can walk an https URL down to http, or to
-    # a non-http scheme, and whether .NET Framework's HttpWebRequest refuses
-    # that on its own. curl is told explicitly (install.sh passes --proto-redir
-    # '=https'); Invoke-WebRequest has no equivalent switch before PowerShell
-    # 7.4's -AllowInsecureRedirect, and hand-rolling the redirect loop to check
-    # each hop is exactly the kind of unrunnable code this file should not grow.
-    # The artifact is checksum-verified regardless of how it was reached.
-    $ManifestBody = (Invoke-WebRequest -Uri $ManifestUrl -UseBasicParsing -MaximumRedirection 5).Content
-    # Windows PowerShell 5.1 hands back .Content as a byte array rather than a
-    # string for content types it does not classify as text, so decode when
-    # that is what arrived. Whichever shape it is, it is parsed the same way.
-    if ($ManifestBody -is [byte[]]) {
-        $ManifestBody = [System.Text.Encoding]::UTF8.GetString($ManifestBody)
+    try {
+        # -MaximumRedirection: Invoke-WebRequest follows redirects by default
+        # with no bound, so a chain can be walked as far as the server likes.
+        # Five is more than any real release host needs
+        # (raw.githubusercontent.com and the GitHub release CDN each use one).
+        #
+        # 30 s end to end is MANIFEST_TIMEOUT_MS from the monorepo's updater —
+        # this is a JSON document of a few hundred bytes, so it is many times
+        # what any link a developer can work on needs.
+        #
+        # UNVERIFIED: what -TimeoutSec actually bounds on Windows PowerShell
+        # 5.1. It maps onto HttpWebRequest.Timeout, which covers getting the
+        # response rather than reading its body; the body has a separate idle
+        # timeout that a server dribbling one byte at a time never trips. On
+        # PowerShell 7 it maps onto HttpClient.Timeout, which does bound the
+        # whole exchange. Neither could be measured here.
+        #
+        # UNVERIFIED: whether a redirect can walk an https URL down to http, or
+        # to a non-http scheme, and whether .NET Framework's HttpWebRequest
+        # refuses that on its own. curl is told explicitly (install.sh passes
+        # --proto-redir '=https'); Invoke-WebRequest has no equivalent switch
+        # before PowerShell 7.4's -AllowInsecureRedirect, and hand-rolling the
+        # redirect loop to check each hop is exactly the kind of unrunnable code
+        # this file should not grow. The artifact is checksum-verified
+        # regardless of how it was reached.
+        Invoke-WebRequest -Uri $ManifestUrl -OutFile $ManifestFile -UseBasicParsing -MaximumRedirection 5 -TimeoutSec 30
+    } catch {
+        Fail "Could not read the channel manifest from $ManifestUrl`nCheck your network connection, and that TWINFORGE_CHANNEL=$Channel names a real channel.`n$($_.Exception.Message)"
     }
-    $Manifest = $ManifestBody | ConvertFrom-Json
-} catch {
-    Fail "Could not read the channel manifest from $ManifestUrl`nCheck your network connection, and that TWINFORGE_CHANNEL=$Channel names a real channel.`n$($_.Exception.Message)"
+
+    # 1 MiB is ~500x the real manifest. Checked after the fact rather than
+    # during the transfer, because Invoke-WebRequest has no size limit to pass:
+    # it bounds what this script is willing to parse and trust, not what a
+    # server can make it write.
+    $ManifestLength = (Get-Item -LiteralPath $ManifestFile).Length
+    if ($ManifestLength -gt 1048576) {
+        Fail "The channel manifest at $ManifestUrl is $ManifestLength bytes. A channel manifest is a few hundred; this installer will not parse one over 1 MiB. Refusing to continue."
+    }
+
+    try {
+        # ReadAllText, not Get-Content: on 5.1 Get-Content without -Encoding
+        # reads with the machine's ANSI code page. This overload detects the
+        # byte-order mark and defaults to UTF-8, which is what the manifest is.
+        $Manifest = [System.IO.File]::ReadAllText($ManifestFile) | ConvertFrom-Json
+    } catch {
+        Fail "Could not read the channel manifest from $ManifestUrl`nIt is not the JSON document this installer expects. Report it — a manifest this installer cannot read is a publishing bug, not something to work around.`n$($_.Exception.Message)"
+    }
+} finally {
+    Remove-Item -LiteralPath $ManifestFile -Force -ErrorAction SilentlyContinue
 }
 
 # A top-level JSON array would make every property read below return an array
@@ -438,6 +542,14 @@ if (-not $ArtifactUrl -or -not $ArtifactSha256) {
     Fail "Manifest at $ManifestUrl has no artifact for platform $PlatformTag."
 }
 Assert-HttpsUrl $ArtifactUrl $ManifestUrl $Version
+# The shape is checked here, not at the comparison. `$ArtifactSha256.ToLower()`
+# below sits outside any catch: a manifest giving sha256 as anything without a
+# ToLower to call threw a raw PowerShell error after the whole artifact had been
+# downloaded. install.sh applies the same 64-hex rule, so a manifest one
+# installer refuses the other refuses too.
+if ($ArtifactSha256 -notmatch '\A[0-9A-Fa-f]{64}\z') {
+    Fail "Manifest at $ManifestUrl gives platform $PlatformTag a 'sha256' that is not 64 hexadecimal characters. Refusing to continue."
+}
 
 $VersionsDir = Join-Path $AppDir "versions"
 $VersionDir = Join-Path $VersionsDir $Version
@@ -475,7 +587,10 @@ $LauncherPath = Join-Path (Join-Path $AppDir "bin") "twinforge.cmd"
 # version (not per-version, unlike the marker above), so it can go missing
 # after a fully successful install too — the marker alone can't see that.
 
-if ((Test-Path $InstalledMarker) -and (Test-Path $LauncherPath)) {
+# -PathType Leaf on both: without it a *directory* named .installed satisfies
+# the marker test and a directory named twinforge.cmd satisfies the launcher
+# test, and the script reports an install that is not there.
+if ((Test-Path -LiteralPath $InstalledMarker -PathType Leaf) -and (Test-Path -LiteralPath $LauncherPath -PathType Leaf)) {
     Write-Host "TwinForge $Version is already installed."
     Set-Current $VersionDir
     Add-BinToUserPath
@@ -539,15 +654,30 @@ try {
     $PreviousProgressPreference = $ProgressPreference
     $ProgressPreference = "SilentlyContinue"
     try {
-        Invoke-WebRequest -Uri $ArtifactUrl -OutFile $TarballPath -UseBasicParsing -MaximumRedirection 5
+        # 30 minutes is DOWNLOAD_TIMEOUT_MS from the monorepo's downloader
+        # (packaging/release-fetch.mjs). The real artifact is 223 MiB, so
+        # clearing it needs 127 KiB/s sustained — well under anything a
+        # developer can work on. See the manifest fetch above for what
+        # -TimeoutSec is and is not known to bound on 5.1.
+        Invoke-WebRequest -Uri $ArtifactUrl -OutFile $TarballPath -UseBasicParsing -MaximumRedirection 5 -TimeoutSec 1800
     } catch {
         Fail "Download failed: $ArtifactUrl`nCheck your network connection and try again.`n$($_.Exception.Message)"
     } finally {
         $ProgressPreference = $PreviousProgressPreference
     }
 
+    # 512 MiB is DOWNLOAD_MAX_BYTES from the same file, over twice the largest
+    # artifact this project ships. Invoke-WebRequest has no size limit to pass,
+    # so this cannot stop a server writing the bytes — it stops them being
+    # hashed, extracted and trusted, and it says why instead of failing later
+    # with something less specific.
+    $TarballLength = (Get-Item -LiteralPath $TarballPath).Length
+    if ($TarballLength -gt 536870912) {
+        Fail "$ArtifactUrl sent $TarballLength bytes. This installer will not install an artifact over 512 MiB. Refusing to continue."
+    }
+
     try {
-        $ActualSha256 = (Get-FileHash -Algorithm SHA256 -Path $TarballPath).Hash
+        $ActualSha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $TarballPath).Hash
     } catch {
         Fail "Could not compute the checksum of the downloaded file at $TarballPath.`n$($_.Exception.Message)"
     }
@@ -572,7 +702,7 @@ try {
     }
 
     $ExtractedVersionDir = Join-Path $ExtractDir $Version
-    if (-not (Test-Path $ExtractedVersionDir)) {
+    if (-not (Test-Path -LiteralPath $ExtractedVersionDir -PathType Container)) {
         Fail "Downloaded archive does not contain a $Version directory. This looks like a packaging bug, not a network problem — please report it."
     }
     # The launcher by name, not the directory. An archive whose bin\ existed but
@@ -641,7 +771,7 @@ try {
                 Fail "Could not install TwinForge $Version into $VersionDir ($($swapError.Exception.Message)), and the copy that was there could not be put back ($($_.Exception.Message)).`nIt has not been deleted: it is at $AsideDir. Move that directory back to $VersionDir to restore this install."
             }
         }
-        Fail "Could not install TwinForge $Version into $VersionDir.`nThe copy that was there before is untouched.`n$($swapError.Exception.Message)"
+        Fail "Could not install TwinForge $Version into $VersionDir.`nNothing that was already installed has been changed.`n$($swapError.Exception.Message)"
     }
 
     # bin\ after the payload, never before. bin\ is shared across every
