@@ -47,6 +47,12 @@ DARWIN_SHA="2222222222222222222222222222222222222222222222222222222222222222"
 for shape in pretty minified; do
   f="manifest-$shape.json"
   check "$shape: version is the top-level one" "2026.816.0" "$(field_of "$f" linux-x64 version)"
+  # The three fields the signature depends on. schemaVersion is read from the
+  # scanner's *scalar* path, because it is a JSON number and every other field
+  # here is a JSON string; the two shapes have to agree about that too.
+  check "$shape: schemaVersion" "2" "$(field_of "$f" linux-x64 schemaVersion)"
+  check "$shape: channel" "canary" "$(field_of "$f" linux-x64 channel)"
+  check "$shape: keyId" "2026-08-canary" "$(field_of "$f" linux-x64 keyId)"
   check "$shape: linux-x64 url" "$LINUX_URL" "$(field_of "$f" linux-x64 url)"
   check "$shape: linux-x64 sha256" "$LINUX_SHA" "$(field_of "$f" linux-x64 sha256)"
   # The one that mattered: darwin-arm64 is the *second* artifact in the file,

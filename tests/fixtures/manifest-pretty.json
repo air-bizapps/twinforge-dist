@@ -1,4 +1,8 @@
 {
+  "schemaVersion": 2,
+  "channel": "canary",
+  "keyId": "2026-08-canary",
+  "sequence": 1,
   "version": "2026.816.0",
   "artifacts": {
     "linux-x64": {
