@@ -523,6 +523,9 @@ try {
 $IncomingDir = Join-Path $VersionsDir ".incoming+$WorkId"
 $AsideDir = Join-Path $VersionsDir ".old+$WorkId"
 $AsideHoldsTheLiveVersion = $false
+# The launcher is swapped in through a sibling in the same directory, so this
+# one lives in bin\ rather than under $WorkDir.
+$LauncherStagePath = Join-Path (Join-Path $AppDir "bin") "twinforge.cmd+$WorkId"
 try {
     $TarballPath = Join-Path $WorkDir "twinforge.tar.gz"
     Write-Host "Downloading TwinForge $Version for $PlatformTag... (a few hundred MiB; no progress is shown)"
@@ -572,9 +575,14 @@ try {
     if (-not (Test-Path $ExtractedVersionDir)) {
         Fail "Downloaded archive does not contain a $Version directory. This looks like a packaging bug, not a network problem — please report it."
     }
-    $ExtractedBinDir = Join-Path $ExtractDir "bin"
-    if (-not (Test-Path $ExtractedBinDir)) {
-        Fail "Downloaded archive has no bin\ directory. This looks like a packaging bug, not a network problem — please report it."
+    # The launcher by name, not the directory. An archive whose bin\ existed but
+    # was empty passed the old check, so the marker was written and PATH updated
+    # while the launcher never appeared — and the short-circuit at the top then
+    # failed forever, re-downloading a few hundred MiB on every run without ever
+    # saying why.
+    $ExtractedLauncher = Join-Path (Join-Path $ExtractDir "bin") "twinforge.cmd"
+    if (-not (Test-Path -LiteralPath $ExtractedLauncher -PathType Leaf)) {
+        Fail "Downloaded archive has no bin\twinforge.cmd launcher. This looks like a packaging bug, not a network problem — please report it."
     }
 
     # --- Commit ----------------------------------------------------------------
@@ -642,11 +650,42 @@ try {
     # likely to fail. The comment that used to sit here claimed this ordering
     # while the code did the opposite; install.sh had the same wrong comment and
     # the same inversion, and both now match what they say.
+    #
+    # Only bin\twinforge.cmd, not `bin\*`. packaging/build-release-tarball.mjs
+    # writes exactly one launcher there, so naming it loses nothing today, stops
+    # a future archive adding neighbours to a directory that is on the PATH of
+    # every shell the developer opens, and removes the case where the merging
+    # copy left a stale launcher behind across an upgrade or downgrade.
+    # install.sh copies bin/twinforge the same way and for the same reasons.
+    #
+    # And it is replaced through a sibling, not written over in place. Upgrading
+    # while a TwinForge was running used to fail partway through `Copy-Item
+    # -Force`, having already written some of bin\ — shared across versions, so
+    # the damage outlived the failed install, and the marker was never written.
+    # cmd.exe re-reads a running .cmd from disk by byte offset, so overwriting
+    # it in place is precisely what corrupts a running instance. File.Replace is
+    # one Win32 call: it either swaps the file or leaves the old one exactly as
+    # it was.
+    #
+    # That is also the running-instance detection. Rather than guessing at
+    # process names, the replace is attempted and its failure is read for what
+    # it is.
+    #
+    # UNVERIFIED: that a running twinforge.cmd holds a share mode that makes
+    # File.Replace fail rather than succeed. If it succeeds, the swap is still
+    # the safe way to do it; if it fails, the message below is the right one.
+    # Either way the old launcher survives, which is the property that matters.
+    $BinDir = Join-Path $AppDir "bin"
     try {
-        New-Item -ItemType Directory -Path (Join-Path $AppDir "bin") -Force | Out-Null
-        Copy-Item -Path (Join-Path $ExtractedBinDir "*") -Destination (Join-Path $AppDir "bin") -Recurse -Force
+        New-Item -ItemType Directory -Path $BinDir -Force | Out-Null
+        Copy-Item -LiteralPath $ExtractedLauncher -Destination $LauncherStagePath -Force
+        if (Test-Path -LiteralPath $LauncherPath -PathType Leaf) {
+            [System.IO.File]::Replace($LauncherStagePath, $LauncherPath, $null)
+        } else {
+            [System.IO.File]::Move($LauncherStagePath, $LauncherPath)
+        }
     } catch {
-        Fail "Could not install the TwinForge launcher into $AppDir\bin.`n$($_.Exception.Message)"
+        Fail "TwinForge $Version is unpacked at $VersionDir, but the launcher at $LauncherPath could not be replaced.`nThe launcher that was there is untouched. A TwinForge still running is the usual cause — close it and re-run this script.`n$($_.Exception.Message)"
     }
     try {
         New-Item -ItemType File -Path $InstalledMarker -Force | Out-Null
@@ -655,8 +694,9 @@ try {
     }
 } finally {
     Remove-Item -LiteralPath $WorkDir -Recurse -Force -ErrorAction SilentlyContinue
-    # Only ever this run's own leftover.
+    # Only ever this run's own leftovers.
     Remove-Item -LiteralPath $IncomingDir -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $LauncherStagePath -Force -ErrorAction SilentlyContinue
     # $true means $VersionDir holds nothing usable and this directory holds what
     # it should. Nothing may delete it in that state — it is not a leftover
     # then, it is the version, and the message above tells the developer where
