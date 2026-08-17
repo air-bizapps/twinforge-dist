@@ -41,4 +41,3 @@ permissão, não técnica: quem cuida de release trabalha aqui sem precisar de a
 
 Este repositório não guarda segredo algum. Quem publica é o pipeline do repositório de produto,
 usando um token de escrita que vive lá.
-# teste de protecao
