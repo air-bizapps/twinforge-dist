@@ -254,6 +254,28 @@ if (-not $Version) {
 if (($Version -notmatch '\A[A-Za-z0-9._-]+\z') -or ($Version -eq ".") -or ($Version -eq "..")) {
     Fail "Manifest at $ManifestUrl declares an unusable version '$Version'. Expected only letters, digits, dot, underscore and hyphen (and not '.' or '..'), because the version is used as a directory name. Refusing to continue."
 }
+# The check above rejects "." and ".." by name, which leaves "..." — three dots
+# match the character class and are neither literal. Win32 path normalisation
+# strips trailing periods from the final component, so <AppDir>\versions\...
+# resolves to <AppDir>\versions, which made the Test-Path below succeed against
+# the versions directory and aimed a recursive delete at every installed
+# version. Any name that is nothing but dots, and any name ending in one, is
+# refused here; the normalisation test after $VersionDir is built is the
+# backstop for whatever this rule has not thought of.
+if (($Version -match '\A\.+\z') -or $Version.EndsWith(".")) {
+    Fail "Manifest at $ManifestUrl declares an unusable version '$Version'. Windows strips trailing dots from a directory name, so this one would not name the directory it appears to. Refusing to continue."
+}
+# Reserved device names are not filenames, and Test-Path against one returns
+# true in any directory — so the archive-shape checks below were satisfied by a
+# path that does not exist. The reservation applies to the stem, so NUL.txt is
+# reserved exactly as NUL is.
+#
+# UNVERIFIED: the Test-Path behaviour. The reservation itself is documented
+# (Win32 naming rules); that Test-Path C:\anything\NUL returns true was reported
+# rather than reproduced here.
+if ($Version.Split(".")[0] -match '\A(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])\z') {
+    Fail "Manifest at $ManifestUrl declares an unusable version '$Version'. That is a reserved Windows device name and cannot be a directory. Refusing to continue."
+}
 
 $ArtifactUrl = Get-ManifestString (Get-ArtifactField $Manifest "url") "artifacts.$PlatformTag.url" $ManifestUrl
 $ArtifactSha256 = Get-ManifestString (Get-ArtifactField $Manifest "sha256") "artifacts.$PlatformTag.sha256" $ManifestUrl
@@ -264,6 +286,26 @@ Assert-HttpsUrl $ArtifactUrl $ManifestUrl $Version
 
 $VersionsDir = Join-Path $AppDir "versions"
 $VersionDir = Join-Path $VersionsDir $Version
+# The backstop for the version-name rules above: whatever the manifest asked
+# for, the path this script is about to create, delete and extract into must
+# still end in exactly that name once Windows has normalised it. If it does
+# not, the name is aimed somewhere other than where it reads, and that is the
+# whole of the "..." bug regardless of which spelling produced it.
+# GetFullPath does no I/O — it is string normalisation — so this is safe to run
+# against a path that does not exist yet.
+#
+# UNVERIFIED: that GetFullPath performs the trailing-period trim on both .NET
+# Framework (PowerShell 5.1) and .NET (PowerShell 7). It is documented Win32
+# behaviour, not something reproduced here, which is why the explicit rules
+# above do not lean on it.
+try {
+    $NormalizedVersionDir = [System.IO.Path]::GetFullPath($VersionDir)
+} catch {
+    Fail "Manifest at $ManifestUrl declares a version '$Version' that does not form a usable path under $VersionsDir.`n$($_.Exception.Message)"
+}
+if ([System.IO.Path]::GetFileName($NormalizedVersionDir) -ne $Version) {
+    Fail "Manifest at $ManifestUrl declares a version '$Version' that Windows normalises to something else ($NormalizedVersionDir). Refusing to continue."
+}
 # Written only after the version directory AND bin\ are both fully in place.
 # Idempotency is gated on this, not on $VersionDir existing, because a
 # directory existing while bin\ is still incomplete (interrupted disk-full,
