@@ -242,7 +242,11 @@ function Set-Current([string]$Target) {
     # which is why it names the path and says what to do.
     $existing = Get-Item -LiteralPath $currentLink -Force -ErrorAction SilentlyContinue
     if ($existing) {
-        if ($existing.Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
+        # Compared to the flag rather than tested for truth: PowerShell's rules
+        # for whether a non-zero enum is truthy are not worth relying on where
+        # getting it backwards would send a junction down the "this is a real
+        # directory" branch and refuse a perfectly ordinary re-run.
+        if (($existing.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -eq [System.IO.FileAttributes]::ReparsePoint) {
             try {
                 # .Delete() on a junction removes the link, not what it points at.
                 $existing.Delete()
@@ -258,6 +262,35 @@ function Set-Current([string]$Target) {
         New-Item -ItemType Junction -Path $currentLink -Target $Target | Out-Null
     } catch {
         Fail "Could not point 'current' at $Target.`nIf $currentLink still exists, remove it by hand and re-run this script.`n$($_.Exception.Message)"
+    }
+}
+
+# Belt and braces behind the staging decision below: both ends are under $AppDir
+# now, so an ordinary install never reaches the fallback. It exists because
+# $AppDir\versions can itself be a junction onto another volume — people do
+# relocate directories that grow to a few hundred MiB each — and there the
+# rename is a cross-volume move again.
+#
+# The fallback runs only after Move-Item has already failed, so it cannot make
+# a working case worse; and if the copy fails too, the *original* error is what
+# gets reported, because that is the one that describes the real problem.
+#
+# UNVERIFIED: the exception type and message the provider raises for a
+# cross-volume directory move. Nothing here matches on either — any move
+# failure is retried as a copy — precisely because that shape could not be
+# checked.
+function Move-Directory([string]$From, [string]$To) {
+    try {
+        Move-Item -LiteralPath $From -Destination $To
+        return
+    } catch {
+        $moveError = $_
+    }
+    try {
+        Copy-Item -LiteralPath $From -Destination $To -Recurse -Force
+        Remove-Item -LiteralPath $From -Recurse -Force
+    } catch {
+        throw $moveError
     }
 }
 
@@ -308,35 +341,6 @@ function Get-PathEntryKey([string]$Entry) {
 # 1024-character truncation people remember belongs to setx and the legacy
 # System Properties dialog; nothing here asserts either way, and nothing here
 # truncates.
-# Belt and braces behind the staging decision below: both ends are under $AppDir
-# now, so an ordinary install never reaches the fallback. It exists because
-# $AppDir\versions can itself be a junction onto another volume — people do
-# relocate directories that grow to a few hundred MiB each — and there the
-# rename is a cross-volume move again.
-#
-# The fallback runs only after Move-Item has already failed, so it cannot make
-# a working case worse; and if the copy fails too, the *original* error is what
-# gets reported, because that is the one that describes the real problem.
-#
-# UNVERIFIED: the exception type and message the provider raises for a
-# cross-volume directory move. Nothing here matches on either — any move
-# failure is retried as a copy — precisely because that shape could not be
-# checked.
-function Move-Directory([string]$From, [string]$To) {
-    try {
-        Move-Item -LiteralPath $From -Destination $To
-        return
-    } catch {
-        $moveError = $_
-    }
-    try {
-        Copy-Item -LiteralPath $From -Destination $To -Recurse -Force
-        Remove-Item -LiteralPath $From -Recurse -Force
-    } catch {
-        throw $moveError
-    }
-}
-
 function Add-BinToUserPath {
     $binDir = Join-Path $AppDir "bin"
     $binKey = Get-PathEntryKey $binDir
