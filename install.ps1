@@ -507,10 +507,11 @@ if (-not $Version) {
     Fail "Manifest at $ManifestUrl has no 'version' field. It may be malformed, or the channel may not exist yet."
 }
 
-# $Version becomes a directory name under $AppDir\versions and is interpolated
-# into the Remove-Item below. It is remote input, so it is checked before it is
-# used as a path — `.` and `..` pass the character class but would aim that
-# delete at the versions directory or the install root itself.
+# $Version becomes a directory name under $AppDir\versions, and the paths built
+# from it below are created, moved and eventually deleted. It is remote input,
+# so it is checked before it is used as a path — `.` and `..` pass the character
+# class but would aim all of that at the versions directory or the install root
+# itself.
 #
 # \A and \z, not ^ and $: in .NET regex `$` also matches immediately before a
 # trailing newline, so "1.0.0`n<anything>" would pass a `$`-anchored check.
@@ -520,9 +521,10 @@ if (($Version -notmatch '\A[A-Za-z0-9._-]+\z') -or ($Version -eq ".") -or ($Vers
 # The check above rejects "." and ".." by name, which leaves "..." — three dots
 # match the character class and are neither literal. Win32 path normalisation
 # strips trailing periods from the final component, so <AppDir>\versions\...
-# resolves to <AppDir>\versions, which made the Test-Path below succeed against
-# the versions directory and aimed a recursive delete at every installed
-# version. Any name that is nothing but dots, and any name ending in one, is
+# resolved to <AppDir>\versions, which made the existence check below succeed
+# against the versions directory and aimed the recursive delete that used to sit
+# there at every installed version. Any name that is nothing but dots, and any
+# name ending in one, is
 # refused here; the normalisation test after $VersionDir is built is the
 # backstop for whatever this rule has not thought of.
 if (($Version -match '\A\.+\z') -or $Version.EndsWith(".")) {
