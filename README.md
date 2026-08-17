@@ -119,15 +119,22 @@ primeira release. Até lá os instaladores buscam o manifest e param num 404.
 ### Antes de publicar a primeira release
 
 Os verificadores estão nos dois instaladores e a chave pública `2026-08-canary` já está embutida nos
-dois. Ainda assim **nenhuma release é instalável hoje**, e continua sendo de propósito: falta o job
-que assina, então não existe `.sig` que os verificadores aceitem. Falhar fechado é o desenho, e uma
-fase "aceita qualquer coisa enquanto a gente se organiza" é exatamente o buraco que quem consegue
-escrever neste repositório usaria.
+dois. **Nenhuma release foi publicada ainda** — `channels/` continua vazio até a primeira tag
+`tfapp.v*` rodar no repositório de produto, e até lá os instaladores param num 404. Falhar fechado é o
+desenho, e uma fase "aceita qualquer coisa enquanto a gente se organiza" é exatamente o buraco que quem
+consegue escrever neste repositório usaria.
 
-O que falta é a outra metade da **cerimônia da chave**, descrita na §3 do desenho
-(`docs/superpowers/specs/2026-08-17-assinatura-do-manifest-design.md`, no repositório de produto): um
-job `sign` separado, num Environment com revisor obrigatório, cujo único segredo é a chave privada e
-cujo único produto é o `.sig`.
+Quem publica é o pipeline da §3 do desenho
+(`docs/superpowers/specs/2026-08-17-assinatura-do-manifest-design.md`, no repositório de produto): três
+jobs, sendo o do meio um `sign` num Environment com revisores obrigatórios, restrito a refs de tag, cujo
+único segredo é a chave privada e cujo único produto é o `.sig`. Quem tem o token de escrita **neste**
+repositório não consegue produzir assinatura, e quem aprova a assinatura não usa o token — é essa
+separação que faz os dois conjuntos de pessoas pararem de ser intercambiáveis.
+
+Os dois arquivos de um canal, `canary.json` e `canary.json.sig`, chegam **no mesmo commit** e não podem
+ser regerados nem reformatados aqui. A assinatura cobre os bytes exatos: um `jq .` para embelezar, um
+editor que acrescente newline no fim, ou um checkout no Windows convertendo LF para CRLF produzem um
+manifest que continua *correto* e que todo cliente recusa, com uma mensagem que se lê como sabotagem.
 
 A chave vive em **três lugares**: como PEM no `install.sh`, como módulo em base64 no `install.ps1` (o
 PowerShell 5.1 não tem parser de PEM) e como `publicKeyPem` dentro do tarball de release — esta
