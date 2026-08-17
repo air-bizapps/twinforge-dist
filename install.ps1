@@ -124,6 +124,24 @@ if ($arch -ne [System.Runtime.InteropServices.Architecture]::X64) {
 }
 $PlatformTag = "win-x64"
 
+# tar is probed here, beside the architecture check, rather than discovered at
+# the extraction step — which is after a few hundred MiB have been downloaded
+# and verified. `& tar` with no tar on PATH raises CommandNotFoundException,
+# and the block that wraps the extraction has only a `finally`, so the
+# developer got a bare PowerShell stack trace at the end of a long download
+# instead of a sentence telling them what to install. install.sh gates on
+# `need_cmd tar` before it does any work; this is that gate.
+#
+# -CommandType Application, and then invoking the resolved path: a `tar`
+# function or alias in the developer's profile would satisfy a bare probe and
+# then not set $LASTEXITCODE, which is the only thing the extraction below
+# checks.
+$TarCommand = Get-Command tar -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+if (-not $TarCommand) {
+    Fail "Could not find tar.exe on your PATH.`nThe release artifact is a .tar.gz, and tar has shipped with Windows since 10 1803 and Server 2019. If you are on an older build, install it (or add %SystemRoot%\System32 back to your PATH) and re-run this script."
+}
+$TarExe = $TarCommand.Source
+
 # --- Manifest helpers ----------------------------------------------------------
 # The manifest is parsed into an object below, so an unrelated field the
 # manifest grows later cannot break this: we only read the properties we need.
@@ -379,7 +397,7 @@ try {
     } catch {
         Fail "Could not create the extraction directory at $ExtractDir.`n$($_.Exception.Message)"
     }
-    & tar -xzf $TarballPath -C $ExtractDir
+    & $TarExe -xzf $TarballPath -C $ExtractDir
     if ($LASTEXITCODE -ne 0) {
         Fail "Could not extract $TarballPath. The archive may be corrupted; try again."
     }
