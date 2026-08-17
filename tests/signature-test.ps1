@@ -193,6 +193,35 @@ Assert-Refuses "with no keys at all, a good signature is still refused" "carries
     }
 }
 
+# The identity of the shipped key, which nothing else in this file can check:
+# every other case here runs against the local-test override, so all of them pass
+# just as well against an install.ps1 carrying a modulus nobody holds the private
+# half of -- and so does tests/key-parity-test.sh, which only asks whether the two
+# installers agree with each other.
+#
+# The fixture was signed once, by the release private key, at the ceremony. No
+# signature over those bytes can be produced without that key, so this is what
+# says the modulus in install.ps1 is that key and not merely a valid one. A
+# consistent replacement across both installers and the monorepo passes parity
+# and fails here.
+#
+# Committed under tests/fixtures/, not built by make-signature-fixtures.sh: it is
+# the same two files the sh test and the monorepo verify, and it must not be
+# regenerable by anything that does not hold the private key.
+Assert-Accepts "the shipped modulus really is the release signing key (fixture from the ceremony)" {
+    $previous = $env:TWINFORGE_DIST_PUBKEY_MODULUS_FILE
+    try {
+        $env:TWINFORGE_DIST_PUBKEY_MODULUS_FILE = $null
+        $fixtures = Join-Path $PSScriptRoot "fixtures"
+        Test-ManifestSignature `
+            ([System.IO.File]::ReadAllBytes((Join-Path $fixtures "key-identity.txt"))) `
+            ([System.IO.File]::ReadAllText((Join-Path $fixtures "key-identity.sig"))) `
+            "2026-08-canary" "URL"
+    } finally {
+        $env:TWINFORGE_DIST_PUBKEY_MODULUS_FILE = $previous
+    }
+}
+
 Assert-Refuses "a key below 3072 bits is refused even when its signature is good" "below the 3072-bit minimum" {
     $previous = $env:TWINFORGE_DIST_PUBKEY_MODULUS_FILE
     try {
