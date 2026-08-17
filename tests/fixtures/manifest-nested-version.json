@@ -1,0 +1,10 @@
+{
+  "artifacts": {
+    "linux-x64": {
+      "version": "not-the-top-level-one",
+      "url": "https://example.com/twinforge-2026.816.0-linux-x64.tar.gz",
+      "sha256": "1111111111111111111111111111111111111111111111111111111111111111"
+    }
+  },
+  "version": "2026.816.0"
+}

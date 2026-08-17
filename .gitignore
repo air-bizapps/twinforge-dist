@@ -1,2 +1,5 @@
 node_modules/
 *.tar.gz
+# Where tests/make-signature-fixtures.sh writes, in CI and when run by hand.
+# Keys and signatures generated on the spot; nothing here is ever committed.
+signature-fixtures/

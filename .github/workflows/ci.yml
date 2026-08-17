@@ -1,0 +1,159 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  shellcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # -s sh, not bash: the shebang says sh and the documented invocation is
+      # `curl ... | sh`, which on Debian and Ubuntu is dash. Checking it as bash
+      # would let bashisms through that the audience's shell cannot run.
+      # -S style because it passes at that level today, and the cheapest way to
+      # keep it there is to fail when it stops.
+      - run: shellcheck --version
+      - run: shellcheck -s sh -S style install.sh
+      # -x so the tests' `. install.sh` is followed rather than skipped.
+      - run: shellcheck -x -s sh -S style tests/*.sh
+
+      # Both installers are read BOM-less. Windows PowerShell 5.1 then decodes
+      # install.ps1 as the machine's ANSI code page rather than UTF-8, so a
+      # single non-ASCII byte (an em dash, a curly quote, ...) can turn into a
+      # character PowerShell treats as a string delimiter and silently break
+      # the parse; keeping both files pure ASCII is what makes that class of
+      # failure impossible rather than merely unlikely.
+      - name: Installers are pure ASCII
+        run: |
+          status=0
+          for f in install.sh install.ps1; do
+            if LC_ALL=C grep -nP '[^\x09\x0A\x20-\x7E]' "$f"; then
+              echo "::error::$f contains a non-ASCII byte. Windows PowerShell 5.1 reads a BOM-less file as the ANSI code page, not UTF-8, so a character like an em dash can be misdecoded into a quote and silently break the parse; keep comments and messages pure ASCII (use -- and ... instead)."
+              status=1
+            fi
+          done
+          exit $status
+
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # /bin/sh here is dash, which is the point: these run against the shell
+      # most of the audience actually invokes, not against bash.
+      - run: sh tests/manifest-parse-test.sh
+      - run: sh tests/url-validation-test.sh
+      - run: sh tests/truncation-test.sh
+      # Real RSA-3072 keys, real openssl signatures, generated in the job. The
+      # cases that matter are the refusals: an altered byte, another key, a
+      # truncated signature, a renamed channel, an unknown keyId, and no keys at
+      # all.
+      - run: sh tests/signature-test.sh
+      # The same key in two representations, one per installer. Passes today by
+      # agreeing that both lists are empty; it is the check that matters on the
+      # day the signing ceremony adds the first real key.
+      - run: sh tests/key-parity-test.sh
+
+      # The Windows job verifies signatures that *openssl* made, not ones .NET
+      # made for itself -- a test that signs and verifies with the same library
+      # agrees with itself whatever it does with encodings. So the fixtures are
+      # built here and carried over.
+      - name: Build the signature fixtures for the Windows job
+        run: sh tests/make-signature-fixtures.sh signature-fixtures
+      - uses: actions/upload-artifact@v4
+        with:
+          name: signature-fixtures
+          path: signature-fixtures/
+          retention-days: 1
+
+  # Until the signature verification landed, install.ps1 had never been executed
+  # by anyone, on any machine: no Windows was available at any point in its
+  # development, so a parser and a linter were the whole of what stood between
+  # it and main. The two signature steps below are the first part of it that
+  # actually runs. Everything else in the file is still only parsed.
+  powershell:
+    runs-on: windows-latest
+    # For the fixtures the signature test verifies. It costs this job a wait on
+    # the Linux one; what it buys is that the signatures it checks were made by
+    # the same openssl the release pipeline will sign with.
+    needs: tests
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: signature-fixtures
+          path: signature-fixtures
+
+      # The highest-value gate available for a file nobody has run: a plain
+      # syntax error cannot reach main unnoticed. Run under both runtimes on
+      # purpose. `pwsh` is PowerShell 7; `powershell` is Windows PowerShell 5.1,
+      # which is what the audience gets from a stock Start menu and the runtime
+      # several of this file's hazards are specific to.
+      - name: Parse under PowerShell 7
+        shell: pwsh
+        run: ./tests/parse-install-ps1.ps1
+      - name: Parse under Windows PowerShell 5.1
+        shell: powershell
+        run: ./tests/parse-install-ps1.ps1
+
+      # The two steps below are the first part of install.ps1 that anyone or
+      # anything has ever executed. Everything else about that file is checked
+      # by a parser and by a linter, neither of which says whether it works.
+      #
+      # The 5.1 run is the one that matters: [RSA]::Create() there is a
+      # legacy-CSP RSACryptoServiceProvider rather than the .NET implementation
+      # PowerShell 7 uses, and whether that one can verify PKCS#1 v1.5 over
+      # SHA-256 from an imported modulus is the single thing about this verifier
+      # that could not be settled anywhere else. If this step fails on 5.1 and
+      # passes on 7, that is the answer -- see the UNVERIFIED note beside
+      # Test-ManifestSignature in install.ps1, which names the fault and its
+      # known remedy.
+      - name: Verify manifest signatures under PowerShell 7
+        shell: pwsh
+        run: ./tests/signature-test.ps1 signature-fixtures
+      - name: Verify manifest signatures under Windows PowerShell 5.1
+        shell: powershell
+        run: ./tests/signature-test.ps1 signature-fixtures
+
+      - name: PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          Install-Module -Name PSScriptAnalyzer -Force -Scope CurrentUser
+          Import-Module PSScriptAnalyzer
+          # The exclusions are deliberate choices this file makes, each of them
+          # load-bearing:
+          #
+          #   PSAvoidUsingWriteHost   every message here is for a human at a
+          #                           terminal. Write-Output would put them in
+          #                           the pipeline of an `irm ... | iex`.
+          #   PSUseApprovedVerbs      Fail, Assert-HttpsUrl and
+          #                           Assert-ManifestUrl are named after their
+          #                           counterparts in install.sh so the two
+          #                           files read as one pair.
+          #   PSUseShouldProcess...   the whole script is one state change and
+          #                           has no -WhatIf story to tell.
+          #   PSUseSingularNouns      Write-NextSteps prints several.
+          #   PSUseBOMForUnicode...   this file is fetched and handed to iex as
+          #                           a string; it is not going to grow a
+          #                           byte-order mark for that.
+          #
+          # This list was written without running the tool — no Windows was
+          # available. If a rule fires that is not here, it is a finding to look
+          # at, not something to add to the list on sight.
+          $excluded = @(
+            'PSAvoidUsingWriteHost',
+            'PSUseApprovedVerbs',
+            'PSUseShouldProcessForStateChangingFunctions',
+            'PSUseSingularNouns',
+            'PSUseBOMForUnicodeEncodedFile'
+          )
+          $findings = Invoke-ScriptAnalyzer -Path ./install.ps1 -Severity Error,Warning -ExcludeRule $excluded
+          if ($findings) {
+            $findings | Format-Table -AutoSize RuleName, Severity, Line, Message | Out-String -Width 200 | Write-Host
+            exit 1
+          }
+          Write-Host 'PSScriptAnalyzer: no findings.'

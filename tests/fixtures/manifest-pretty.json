@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 2,
+  "channel": "canary",
+  "keyId": "2026-08-canary",
+  "sequence": 1,
+  "version": "2026.816.0",
+  "artifacts": {
+    "linux-x64": {
+      "url": "https://example.com/twinforge-2026.816.0-linux-x64.tar.gz",
+      "sha256": "1111111111111111111111111111111111111111111111111111111111111111"
+    },
+    "darwin-arm64": {
+      "url": "https://example.com/twinforge-2026.816.0-darwin-arm64.tar.gz",
+      "sha256": "2222222222222222222222222222222222222222222222222222222222222222"
+    }
+  }
+}
