@@ -185,12 +185,12 @@ refuses "an unknown keyId is refused, even with a signature that would verify" "
 # inside the command substitution `refuses` already opens, so the environment
 # they change is a subshell's and nothing leaks into the cases after them.
 # Both are invoked by name, through `refuses`, which shellcheck cannot follow.
-# shellcheck disable=SC2329
+# shellcheck disable=SC2317,SC2329
 verify_with_no_keys() {
   unset TWINFORGE_DIST_PUBKEY_FILE
   verify_manifest_signature "$@"
 }
-# shellcheck disable=SC2329
+# shellcheck disable=SC2317,SC2329
 verify_with_weak_key() {
   TWINFORGE_DIST_PUBKEY_FILE="$work/weak-pub.pem"
   export TWINFORGE_DIST_PUBKEY_FILE
