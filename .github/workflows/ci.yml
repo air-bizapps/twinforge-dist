@@ -22,6 +22,23 @@ jobs:
       # -x so the tests' `. install.sh` is followed rather than skipped.
       - run: shellcheck -x -s sh -S style tests/*.sh
 
+      # Both installers are read BOM-less. Windows PowerShell 5.1 then decodes
+      # install.ps1 as the machine's ANSI code page rather than UTF-8, so a
+      # single non-ASCII byte (an em dash, a curly quote, ...) can turn into a
+      # character PowerShell treats as a string delimiter and silently break
+      # the parse; keeping both files pure ASCII is what makes that class of
+      # failure impossible rather than merely unlikely.
+      - name: Installers are pure ASCII
+        run: |
+          status=0
+          for f in install.sh install.ps1; do
+            if LC_ALL=C grep -nP '[^\x09\x0A\x20-\x7E]' "$f"; then
+              echo "::error::$f contains a non-ASCII byte. Windows PowerShell 5.1 reads a BOM-less file as the ANSI code page, not UTF-8, so a character like an em dash can be misdecoded into a quote and silently break the parse; keep comments and messages pure ASCII (use -- and ... instead)."
+              status=1
+            fi
+          done
+          exit $status
+
   tests:
     runs-on: ubuntu-latest
     steps:
