@@ -48,14 +48,45 @@ jobs:
       - run: sh tests/manifest-parse-test.sh
       - run: sh tests/url-validation-test.sh
       - run: sh tests/truncation-test.sh
+      # Real RSA-3072 keys, real openssl signatures, generated in the job. The
+      # cases that matter are the refusals: an altered byte, another key, a
+      # truncated signature, a renamed channel, an unknown keyId, and no keys at
+      # all.
+      - run: sh tests/signature-test.sh
+      # The same key in two representations, one per installer. Passes today by
+      # agreeing that both lists are empty; it is the check that matters on the
+      # day the signing ceremony adds the first real key.
+      - run: sh tests/key-parity-test.sh
 
-  # install.ps1 has never been executed by anyone, on any machine — no Windows
-  # was available at any point in its development. This job is the only thing
-  # standing between it and main.
+      # The Windows job verifies signatures that *openssl* made, not ones .NET
+      # made for itself -- a test that signs and verifies with the same library
+      # agrees with itself whatever it does with encodings. So the fixtures are
+      # built here and carried over.
+      - name: Build the signature fixtures for the Windows job
+        run: sh tests/make-signature-fixtures.sh signature-fixtures
+      - uses: actions/upload-artifact@v4
+        with:
+          name: signature-fixtures
+          path: signature-fixtures/
+          retention-days: 1
+
+  # Until the signature verification landed, install.ps1 had never been executed
+  # by anyone, on any machine: no Windows was available at any point in its
+  # development, so a parser and a linter were the whole of what stood between
+  # it and main. The two signature steps below are the first part of it that
+  # actually runs. Everything else in the file is still only parsed.
   powershell:
     runs-on: windows-latest
+    # For the fixtures the signature test verifies. It costs this job a wait on
+    # the Linux one; what it buys is that the signatures it checks were made by
+    # the same openssl the release pipeline will sign with.
+    needs: tests
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: signature-fixtures
+          path: signature-fixtures
 
       # The highest-value gate available for a file nobody has run: a plain
       # syntax error cannot reach main unnoticed. Run under both runtimes on
@@ -68,6 +99,25 @@ jobs:
       - name: Parse under Windows PowerShell 5.1
         shell: powershell
         run: ./tests/parse-install-ps1.ps1
+
+      # The two steps below are the first part of install.ps1 that anyone or
+      # anything has ever executed. Everything else about that file is checked
+      # by a parser and by a linter, neither of which says whether it works.
+      #
+      # The 5.1 run is the one that matters: [RSA]::Create() there is a
+      # legacy-CSP RSACryptoServiceProvider rather than the .NET implementation
+      # PowerShell 7 uses, and whether that one can verify PKCS#1 v1.5 over
+      # SHA-256 from an imported modulus is the single thing about this verifier
+      # that could not be settled anywhere else. If this step fails on 5.1 and
+      # passes on 7, that is the answer -- see the UNVERIFIED note beside
+      # Test-ManifestSignature in install.ps1, which names the fault and its
+      # known remedy.
+      - name: Verify manifest signatures under PowerShell 7
+        shell: pwsh
+        run: ./tests/signature-test.ps1 signature-fixtures
+      - name: Verify manifest signatures under Windows PowerShell 5.1
+        shell: powershell
+        run: ./tests/signature-test.ps1 signature-fixtures
 
       - name: PSScriptAnalyzer
         shell: pwsh
