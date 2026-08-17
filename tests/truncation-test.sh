@@ -10,10 +10,14 @@
 # sandbox HOME and TMPDIR. Syntax errors on stderr are the expected outcome and
 # are ignored.
 #
-# Offsets at or past the start of the final `main "$@"` line are excluded on
-# purpose: a stream cut after a complete `main` token runs the whole installer,
-# which is correct — every function definition is already in hand, so nothing
-# partial can execute.
+# Every offset that stops short of the closing brace is required to run nothing
+# at all, including the ones that end mid-word: the body is one brace group, so
+# until that brace arrives there is no complete top-level statement for the
+# shell to run. Before the group existed, a cut at byte 2351 left the `sa` of
+# `say() {` as a bare command, and macOS has an /usr/sbin/sa.
+#
+# The final line is therefore excluded: a file that includes the closing brace
+# is a complete script and is supposed to install.
 #
 # STRIDE is how many byte offsets to skip between attempts; every line boundary
 # is always tested regardless. Set STRIDE=1 for the exhaustive run (slow: one

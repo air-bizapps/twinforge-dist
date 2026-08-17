@@ -16,8 +16,8 @@
 #   TWINFORGE_HOME          overrides the install root (default: ~/.twinforge),
 #                           matching what the installed server itself honors.
 #
-# Everything below is a function definition until the last line of the file,
-# which is the only statement that does anything. That is not a style choice:
+# Everything below is a function definition, and the only statement that does
+# anything is the `main "$@"` at the end. That is not a style choice:
 # the documented entry point is `curl ... | sh`, and a shell reading a script
 # from a pipe executes each complete statement as it arrives. If the response
 # is cut short mid-file — a dropped connection, a proxy timing out, a CDN
@@ -25,9 +25,21 @@
 # up to the cut, and then exits 0 because it reached EOF cleanly. That is how a
 # truncated download can delete an installed version and report success. With
 # the body inside `main`, a truncated stream ends before `main` is ever called,
-# so it cannot run any of it. `set -eu` is inside `main` for the same reason: a
+# so it cannot run any of it — and the brace group below closes the remaining
+# gap. `set -eu` is inside `main` for the same reason: a
 # file cut in the middle of a top-level `set -eu` leaves a bare `set` as its
 # last complete statement, which dumps the whole environment to stdout.
+
+# The whole body is one brace group, closed on the last line. Wrapping the file
+# in `main` is not by itself enough for something served over a pipe: the shell
+# still executes each complete *top-level* statement as it arrives, and a
+# truncation that ends mid-word leaves a bare word, which is a complete command.
+# Found by sweeping every byte offset of this file: cut at byte 2351, the last
+# thing on the line was the `sa` of `say() {`, and macOS has an /usr/sbin/sa, so
+# the shell ran it. Inside a brace group there is no complete top-level
+# statement until the closing brace arrives, so every short read is a syntax
+# error and nothing at all runs.
+{
 
 # printf, never echo. Under dash — /bin/sh on Debian and Ubuntu, so most of the
 # audience — and under macOS /bin/sh, `echo` expands backslash escapes in its
@@ -639,3 +651,5 @@ The download may be corrupted or tampered with. Try again, and if it keeps happe
 # against fixtures. Nothing else reads this variable, and a truncated stream
 # still cannot reach this line.
 [ "${TWINFORGE_INSTALL_LIB:-}" = "1" ] || main "$@"
+
+}
