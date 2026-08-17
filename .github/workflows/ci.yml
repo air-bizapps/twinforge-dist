@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  shellcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # -s sh, not bash: the shebang says sh and the documented invocation is
+      # `curl ... | sh`, which on Debian and Ubuntu is dash. Checking it as bash
+      # would let bashisms through that the audience's shell cannot run.
+      # -S style because it passes at that level today, and the cheapest way to
+      # keep it there is to fail when it stops.
+      - run: shellcheck --version
+      - run: shellcheck -s sh -S style install.sh
+      # -x so the tests' `. install.sh` is followed rather than skipped.
+      - run: shellcheck -x -s sh -S style tests/*.sh
+
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # /bin/sh here is dash, which is the point: these run against the shell
+      # most of the audience actually invokes, not against bash.
+      - run: sh tests/manifest-parse-test.sh
+      - run: sh tests/url-validation-test.sh
+      - run: sh tests/truncation-test.sh

@@ -632,4 +632,10 @@ The download may be corrupted or tampered with. Try again, and if it keeps happe
   print_next_steps
 }
 
-main "$@"
+# The only statement in this file that does anything — see the header.
+#
+# Sourcing it with TWINFORGE_INSTALL_LIB=1 defines the functions and installs
+# nothing, which is how tests/ exercises the manifest parser and the URL check
+# against fixtures. Nothing else reads this variable, and a truncated stream
+# still cannot reach this line.
+[ "${TWINFORGE_INSTALL_LIB:-}" = "1" ] || main "$@"
