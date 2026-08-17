@@ -103,18 +103,21 @@ jobs:
         shell: powershell
         run: ./tests/parse-install-ps1.ps1
 
-      # The two steps below are the first part of install.ps1 that anyone or
-      # anything has ever executed. Everything else about that file is checked
-      # by a parser and by a linter, neither of which says whether it works.
+      # The two steps below are the only part of install.ps1 that anyone or
+      # anything has ever executed. Everything else about that file is checked by
+      # a parser and by a linter, neither of which says whether it works.
       #
-      # The 5.1 run is the one that matters: [RSA]::Create() there is a
+      # The 5.1 run is the one that mattered: [RSA]::Create() there is a
       # legacy-CSP RSACryptoServiceProvider rather than the .NET implementation
       # PowerShell 7 uses, and whether that one can verify PKCS#1 v1.5 over
-      # SHA-256 from an imported modulus is the single thing about this verifier
-      # that could not be settled anywhere else. If this step fails on 5.1 and
-      # passes on 7, that is the answer -- see the UNVERIFIED note beside
-      # Test-ManifestSignature in install.ps1, which names the fault and its
-      # known remedy.
+      # SHA-256 from an imported modulus was the single thing about this verifier
+      # that could not be settled anywhere else. It can: 5.1.26100.33158 passed
+      # every case, including the fixture signed by the release private key. That
+      # is why the note beside Test-ManifestSignature no longer says UNVERIFIED.
+      #
+      # Keep both runtimes. The answer is about a .NET Framework CSP, not about
+      # this file, so it is a property of the machine the audience has — and the
+      # audience's machine is what changes without telling anyone.
       - name: Verify manifest signatures under PowerShell 7
         shell: pwsh
         run: ./tests/signature-test.ps1 signature-fixtures

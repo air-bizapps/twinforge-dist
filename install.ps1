@@ -451,25 +451,22 @@ function Test-ManifestSignature([byte[]]$Bytes, [string]$SignatureBase64, [strin
     }
 
     # No openssl, no PEM, no file on disk: modulus and exponent go straight into
-    # an RSA object. ImportParameters has existed since .NET 1.1 and this
-    # VerifyData overload since .NET Framework 4.6, which is why this is
-    # believed to work on Windows PowerShell 5.1.
+    # an RSA object.
     #
-    # UNVERIFIED: all of it, on Windows PowerShell 5.1. This exact sequence was
-    # run on PowerShell 7.6.5 against an openssl-produced RSA-3072 signature and
-    # returned True for a good signature and False for a tampered one -- but 7
-    # is .NET, and 5.1 is .NET Framework, where [RSA]::Create() returns an
-    # RSACryptoServiceProvider backed by a legacy CSP. The failure that would
-    # show up there is a CryptographicException saying "Invalid algorithm
-    # specified" (a CSP that predates SHA-2), and the known remedy is to import
-    # into a provider of type PROV_RSA_AES explicitly. It is not written here
-    # because it would be a second unrun path guessing at a fault that may not
-    # exist; the windows-latest CI job runs this file's verification under
-    # `powershell` (5.1) as well as `pwsh`, and that job is what settles it.
+    # VERIFIED on Windows PowerShell 5.1.26100.33158, and it was the open
+    # question this whole file was written around. 5.1 is .NET Framework, where
+    # [RSA]::Create() returns an RSACryptoServiceProvider backed by a legacy CSP;
+    # the feared failure was a CryptographicException saying "Invalid algorithm
+    # specified" from a CSP that predates SHA-2, with the remedy being an
+    # explicit PROV_RSA_AES provider. That remedy is not needed: the
+    # windows-latest job runs tests/signature-test.ps1 under `powershell` as well
+    # as `pwsh`, and 5.1 accepted openssl-produced RSA-3072 signatures, refused a
+    # tampered byte, a swapped key, a truncated signature and an unknown keyId --
+    # and accepted the signature the release private key made over
+    # tests/fixtures/key-identity.txt, which is the real key, not a fixture one.
     #
-    # UNVERIFIED: that ImportParameters accepts RSAParameters carrying only
-    # Modulus and Exponent on that implementation. It is the documented way to
-    # load a public key and it works on 7; the same CI job decides for 5.1.
+    # ImportParameters accepting RSAParameters that carry only Modulus and
+    # Exponent was the second half of that question, and the same run settles it.
     #
     # Whatever it does, it cannot fail *open*: an exception here is a refusal,
     # not an accepted manifest, so the worst case is an installer that refuses
