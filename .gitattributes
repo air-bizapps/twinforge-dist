@@ -1,0 +1,24 @@
+# Bytes, not text.
+#
+# A detached signature covers the exact bytes of a file. Git's end-of-line
+# translation is on by default on Windows (`core.autocrlf=true`, which is what
+# GitHub's windows-latest runners check out with), so without the rules below a
+# checkout there rewrites every LF into CRLF and the file is no longer the file
+# that was signed. Nothing looks wrong: the JSON still parses, the text still
+# reads, and the signature simply stops verifying with a message
+# ("its detached signature does not match its bytes") that reads like sabotage.
+#
+# Measured, not assumed: `git clone -c core.autocrlf=true` turned the 114-byte
+# key-identity fixture into 115 bytes and openssl went from "Verified OK" to
+# "Verification Failure". The Windows CI job found it first.
+#
+# -text, not binary: these files stay diffable and greppable, they just stop
+# being translated.
+
+# The pair a channel publishes. The manifest is signed; the .sig is the signature.
+channels/*.json -text
+channels/*.sig  -text
+
+# The fixture that proves the embedded key is the release key, and its signature.
+tests/fixtures/key-identity.txt -text
+tests/fixtures/key-identity.sig -text
