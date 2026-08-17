@@ -191,13 +191,121 @@ function Set-Current([string]$Target) {
     }
 }
 
+# Entries are compared the way Windows resolves them, not byte for byte. The
+# old `-split ";" -contains $binDir` was an exact match, so an entry that was
+# quoted, or carried a trailing backslash, or was written with %USERPROFILE%
+# unexpanded, did not match — and every run appended another copy.
+function Get-PathEntryKey([string]$Entry) {
+    $entryKey = $Entry.Trim().Trim('"').Trim()
+    if (-not $entryKey) { return "" }
+    $entryKey = [Environment]::ExpandEnvironmentVariables($entryKey)
+    # Length > 3 so "C:\" keeps its separator and stays a root.
+    if ($entryKey.Length -gt 3) { $entryKey = $entryKey.TrimEnd("\", "/") }
+    return $entryKey
+}
+
+# Read and write the user PATH through the registry, preserving its value kind.
+#
+# [Environment]::GetEnvironmentVariable("Path", "User") *expands* a
+# REG_EXPAND_SZ before returning it, and SetEnvironmentVariable writes back as
+# REG_SZ. That round trip did two irreversible things to every developer who
+# ran this successfully, attacker or no attacker:
+#
+#   1. Every %…% reference in their PATH was replaced by its expansion at
+#      install time. %USERPROFILE%\AppData\Local\Microsoft\WindowsApps and
+#      %JAVA_HOME%\bin became hard-coded; change JAVA_HOME afterwards and PATH
+#      no longer follows it, and a roaming profile breaks weeks later with
+#      nothing pointing back here.
+#   2. The value was left REG_SZ, so any %VAR% entry anyone added after that —
+#      by hand, or by another installer — was stored and never expanded, and
+#      showed up in PATH as a literal string with percent signs in it.
+#
+# So: read raw with DoNotExpandEnvironmentNames, write back with the kind the
+# value already had. When the value is absent the new one is created as REG_SZ,
+# which is exactly what the old code produced in that case — the damage was
+# always to an *existing* value, and the fresh case is deliberately left
+# behaving as it did.
+#
+# A kind other than REG_SZ or REG_EXPAND_SZ is not edited at all. Nothing this
+# script wants is worth rewriting a PATH that is already something unexpected.
+#
+# No WM_SETTINGCHANGE broadcast. Doing it needs a P/Invoke declaration through
+# Add-Type, which is a compiler invocation at install time and fails outright
+# under constrained language mode — more than this is worth for an effect the
+# existing "open a new terminal" guidance already covers. That guidance stays.
+#
+# UNVERIFIED: whether this API has a length ceiling of its own. The
+# 1024-character truncation people remember belongs to setx and the legacy
+# System Properties dialog; nothing here asserts either way, and nothing here
+# truncates.
 function Add-BinToUserPath {
     $binDir = Join-Path $AppDir "bin"
-    $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
-    if ($userPath -and ($userPath -split ";" -contains $binDir)) { return }
-    $newPath = if ($userPath) { "$userPath;$binDir" } else { $binDir }
-    [Environment]::SetEnvironmentVariable("Path", $newPath, "User")
-    Write-Host "Added $binDir to your user PATH. Open a new terminal for it to take effect."
+    $binKey = Get-PathEntryKey $binDir
+    $manualAdvice = "Add $binDir to your user PATH by hand (Settings, 'Edit environment variables for your account'), then open a new terminal."
+
+    $envKey = $null
+    try {
+        $envKey = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey("Environment", $true)
+    } catch {
+        $envKey = $null
+    }
+    if (-not $envKey) {
+        Write-Host "TwinForge is installed, but HKCU\Environment could not be opened for writing, so your PATH was left alone. $manualAdvice"
+        return
+    }
+
+    $backupPath = $null
+    try {
+        $rawPath = $envKey.GetValue("Path", $null, [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
+        if ($null -eq $rawPath) {
+            $kind = [Microsoft.Win32.RegistryValueKind]::String
+            $rawPath = ""
+        } else {
+            # GetValueKind throws when the value does not exist, which is why it
+            # is only reached once GetValue has said it does.
+            $kind = $envKey.GetValueKind("Path")
+            if (($kind -ne [Microsoft.Win32.RegistryValueKind]::String) -and ($kind -ne [Microsoft.Win32.RegistryValueKind]::ExpandString)) {
+                Write-Host "TwinForge is installed, but your user PATH is stored as $kind, which this script will not rewrite. $manualAdvice"
+                return
+            }
+            if ($rawPath -isnot [string]) {
+                Write-Host "TwinForge is installed, but your user PATH did not read back as a string, so it was left alone. $manualAdvice"
+                return
+            }
+        }
+
+        foreach ($entry in ($rawPath -split ";")) {
+            if ((Get-PathEntryKey $entry) -eq $binKey) { return }
+        }
+
+        if ($rawPath) {
+            # Best-effort, and never fatal: a PATH this script is about to
+            # rewrite is worth a copy on disk that says what it was, because
+            # nothing else on the machine records it.
+            try {
+                New-Item -ItemType Directory -Path $HomeDir -Force | Out-Null
+                $backupPath = Join-Path $HomeDir ("user-path-backup-" + (Get-Date -Format "yyyyMMdd-HHmmss") + ".txt")
+                Set-Content -LiteralPath $backupPath -Value $rawPath -Encoding UTF8 -NoNewline
+            } catch {
+                $backupPath = $null
+            }
+        }
+
+        # Appended, not prepended, matching install.sh. This directory is filled
+        # from a downloaded archive: putting it first would let a release
+        # containing bin\git.exe or bin\ssh.exe take over those commands for
+        # every shell the developer opens afterwards.
+        $newPath = if ($rawPath) { "$rawPath;$binDir" } else { $binDir }
+        $envKey.SetValue("Path", $newPath, $kind)
+    } finally {
+        $envKey.Close()
+    }
+
+    if ($backupPath) {
+        Write-Host "Added $binDir to your user PATH (its previous value is saved at $backupPath). Open a new terminal for it to take effect."
+    } else {
+        Write-Host "Added $binDir to your user PATH. Open a new terminal for it to take effect."
+    }
 }
 
 function Write-NextSteps {
