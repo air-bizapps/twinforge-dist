@@ -31,3 +31,62 @@ jobs:
       - run: sh tests/manifest-parse-test.sh
       - run: sh tests/url-validation-test.sh
       - run: sh tests/truncation-test.sh
+
+  # install.ps1 has never been executed by anyone, on any machine — no Windows
+  # was available at any point in its development. This job is the only thing
+  # standing between it and main.
+  powershell:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The highest-value gate available for a file nobody has run: a plain
+      # syntax error cannot reach main unnoticed. Run under both runtimes on
+      # purpose. `pwsh` is PowerShell 7; `powershell` is Windows PowerShell 5.1,
+      # which is what the audience gets from a stock Start menu and the runtime
+      # several of this file's hazards are specific to.
+      - name: Parse under PowerShell 7
+        shell: pwsh
+        run: ./tests/parse-install-ps1.ps1
+      - name: Parse under Windows PowerShell 5.1
+        shell: powershell
+        run: ./tests/parse-install-ps1.ps1
+
+      - name: PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          Install-Module -Name PSScriptAnalyzer -Force -Scope CurrentUser
+          Import-Module PSScriptAnalyzer
+          # The exclusions are deliberate choices this file makes, each of them
+          # load-bearing:
+          #
+          #   PSAvoidUsingWriteHost   every message here is for a human at a
+          #                           terminal. Write-Output would put them in
+          #                           the pipeline of an `irm ... | iex`.
+          #   PSUseApprovedVerbs      Fail, Assert-HttpsUrl and
+          #                           Assert-ManifestUrl are named after their
+          #                           counterparts in install.sh so the two
+          #                           files read as one pair.
+          #   PSUseShouldProcess...   the whole script is one state change and
+          #                           has no -WhatIf story to tell.
+          #   PSUseSingularNouns      Write-NextSteps prints several.
+          #   PSUseBOMForUnicode...   this file is fetched and handed to iex as
+          #                           a string; it is not going to grow a
+          #                           byte-order mark for that.
+          #
+          # This list was written without running the tool — no Windows was
+          # available. If a rule fires that is not here, it is a finding to look
+          # at, not something to add to the list on sight.
+          $excluded = @(
+            'PSAvoidUsingWriteHost',
+            'PSUseApprovedVerbs',
+            'PSUseShouldProcessForStateChangingFunctions',
+            'PSUseSingularNouns',
+            'PSUseBOMForUnicodeEncodedFile'
+          )
+          $findings = Invoke-ScriptAnalyzer -Path ./install.ps1 -Severity Error,Warning -ExcludeRule $excluded
+          if ($findings) {
+            $findings | Format-Table -AutoSize RuleName, Severity, Line, Message | Out-String -Width 200 | Write-Host
+            exit 1
+          }
+          Write-Host 'PSScriptAnalyzer: no findings.'
