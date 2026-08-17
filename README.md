@@ -78,6 +78,19 @@ declarava sucesso.
 Nenhum dos dois existe ainda: eles nascem quando o pipeline do repositório de produto publica a
 primeira release. Até lá os instaladores buscam o manifest e param num 404.
 
+### Antes de publicar a primeira release
+
+O manifest ainda **não é assinado**, e o schema para isso precisa entrar **antes** da primeira tag
+`tf.v*`. O motivo é de mão única: no instante em que existir um cliente instalado que aceita manifest
+sem assinatura, esse caminho não sai mais sem abandonar aquele cliente — e enquanto ele existir, basta
+publicar sem assinar para o esquema inteiro não valer nada.
+
+Hoje há zero clientes, então isso é barato. Depois da primeira release, não é.
+
+O desenho está em `docs/superpowers/specs/2026-08-17-assinatura-do-manifest-design.md`, no repositório
+de produto: RSA-3072/SHA-256 destacada, `signature` obrigatório desde o primeiro manifest, lista de
+chaves no plural, `keyId`, campo `channel` e um `sequence` monotônico dentro dos bytes assinados.
+
 ## Alterar os instaladores
 
 Abra PR. Não faça push direto na `main` — os dois instaladores foram escritos assim, sem revisão e
