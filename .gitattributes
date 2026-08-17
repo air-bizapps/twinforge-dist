@@ -22,3 +22,10 @@ channels/*.sig  -text
 # The fixture that proves the embedded key is the release key, and its signature.
 tests/fixtures/key-identity.txt -text
 tests/fixtures/key-identity.sig -text
+
+# The installer and its tests are shell scripts. `curl | sh` is unaffected either
+# way -- raw.githubusercontent.com serves the blob as stored -- but a checkout on
+# Windows produces `set -eu\r`, and what `sh` says about that is
+# "set: Illegal option -", which names nothing an author would recognise.
+# Measured in the same autocrlf clone as above.
+*.sh -text
