@@ -188,6 +188,14 @@ refuses "an unknown keyId is refused, even with a signature that would verify" "
 # shellcheck disable=SC2317,SC2329
 verify_with_no_keys() {
   unset TWINFORGE_DIST_PUBKEY_FILE
+  # Forced, not inherited. This used to just unset the override and lean on the
+  # shipped list being empty -- which was true only until the first real key was
+  # added, and then the case stopped testing "no keys at all" and started
+  # testing "a key id this build does not carry", silently, under the old name.
+  # A test whose meaning depends on today's shipped state is a test that will
+  # change meaning without changing text. `refuses` runs its callee in `$( ... )`,
+  # so this redefinition dies with the subshell.
+  manifest_key_material() { :; }
   verify_manifest_signature "$@"
 }
 # shellcheck disable=SC2317,SC2329
@@ -199,6 +207,34 @@ verify_with_weak_key() {
 
 refuses "with no keys at all, a good signature is still refused" "carries no manifest signing keys" \
   verify_with_no_keys "$work/manifest.json" "$work/manifest.json.sig" local-test URL
+
+# The identity of the shipped key, which nothing else here can check. Every other
+# case generates its own pair, so all of them pass just as well against an
+# install.sh carrying a key nobody holds the private half of -- and so does
+# tests/key-parity-test.sh, which only asks whether the two installers agree.
+# What is asserted here is that the key in this file is the key the release
+# private half signs with: the fixture was signed once, by that key, at the
+# ceremony, and no signature over these bytes can be produced without it.
+#
+# That closes the case a mistake or a malicious PR would otherwise walk through:
+# replacing the key in install.sh, install.ps1 and the monorepo consistently
+# passes parity and fails here.
+#
+# The fixture is not a manifest and not JSON, on purpose -- a signature over it
+# cannot be replayed as a manifest signature. It is not key material either, so
+# the rule about this repository carrying none still holds.
+#
+# Copied into $work because verify_manifest_signature writes "$2.pem" and
+# "$2.der" beside the signature it is given, and tests/fixtures/ is committed.
+cp "$root/tests/fixtures/key-identity.txt" "$work/key-identity.txt"
+cp "$root/tests/fixtures/key-identity.sig" "$work/key-identity.txt.sig"
+# shellcheck disable=SC2317,SC2329
+verify_with_shipped_keys() {
+  unset TWINFORGE_DIST_PUBKEY_FILE
+  verify_manifest_signature "$@"
+}
+accepts "the shipped key really is the release signing key (fixture from the ceremony)" \
+  verify_with_shipped_keys "$work/key-identity.txt" "$work/key-identity.txt.sig" 2026-08-canary URL
 
 # Signature-shaped inputs that are not signatures.
 : > "$work/empty.json.sig"

@@ -176,10 +176,47 @@ Assert-Refuses "an unknown keyId is refused, even with a signature that would ve
 Assert-Refuses "with no keys at all, a good signature is still refused" "carries no manifest signing keys" {
     $previous = $env:TWINFORGE_DIST_PUBKEY_MODULUS_FILE
     try {
-        # The shipped state: Get-ManifestKeys returns the empty list compiled
-        # into install.ps1.
+        # Forced, not inherited. This used to only clear the override and lean on
+        # the list compiled into install.ps1 being empty -- true until the signing
+        # ceremony put a real key there, at which point the case stopped testing
+        # "no keys at all" and started testing "a key id this build does not
+        # carry", under the old name. A test whose meaning depends on today's
+        # shipped state changes meaning without changing text.
+        #
+        # `& $Action` runs this block in a child scope, so this definition shadows
+        # the lifted one for the call below and dies with the block.
         $env:TWINFORGE_DIST_PUBKEY_MODULUS_FILE = $null
+        function Get-ManifestKeys { @() }
         Test-ManifestSignature $GoodBytes $GoodSignature "local-test" "URL"
+    } finally {
+        $env:TWINFORGE_DIST_PUBKEY_MODULUS_FILE = $previous
+    }
+}
+
+# The identity of the shipped key, which nothing else in this file can check:
+# every other case here runs against the local-test override, so all of them pass
+# just as well against an install.ps1 carrying a modulus nobody holds the private
+# half of -- and so does tests/key-parity-test.sh, which only asks whether the two
+# installers agree with each other.
+#
+# The fixture was signed once, by the release private key, at the ceremony. No
+# signature over those bytes can be produced without that key, so this is what
+# says the modulus in install.ps1 is that key and not merely a valid one. A
+# consistent replacement across both installers and the monorepo passes parity
+# and fails here.
+#
+# Committed under tests/fixtures/, not built by make-signature-fixtures.sh: it is
+# the same two files the sh test and the monorepo verify, and it must not be
+# regenerable by anything that does not hold the private key.
+Assert-Accepts "the shipped modulus really is the release signing key (fixture from the ceremony)" {
+    $previous = $env:TWINFORGE_DIST_PUBKEY_MODULUS_FILE
+    try {
+        $env:TWINFORGE_DIST_PUBKEY_MODULUS_FILE = $null
+        $fixtures = Join-Path $PSScriptRoot "fixtures"
+        Test-ManifestSignature `
+            ([System.IO.File]::ReadAllBytes((Join-Path $fixtures "key-identity.txt"))) `
+            ([System.IO.File]::ReadAllText((Join-Path $fixtures "key-identity.sig"))) `
+            "2026-08-canary" "URL"
     } finally {
         $env:TWINFORGE_DIST_PUBKEY_MODULUS_FILE = $previous
     }
