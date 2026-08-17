@@ -134,6 +134,32 @@ function Get-ArtifactField($Manifest, [string]$Field) {
     return $artifact.$Field
 }
 
+# Every value read out of the manifest goes through this before it is used.
+#
+# PowerShell's comparison operators become *filters* when the left operand is a
+# collection: with "version": ["a","b"], `$Version -notmatch '...'` returns the
+# elements that fail the pattern rather than $true or $false, and an empty array
+# is falsy — so the version guard passed without validating anything, and
+# `-eq "."` did the same. Downstream, Join-Path with an array right operand
+# produces an *array of paths*, Test-Path over it emits one boolean per path,
+# and a two-element array is truthy in `if` whatever the booleans are. On a
+# machine with a previous install that meant: "already installed", then
+# Set-Current deletes the working `current` junction, then New-Item fails
+# because -Target cannot take an array. A healthy install with no `current`,
+# blaming the junction. No download, no checksum, no privileges needed.
+#
+# So a manifest field is a JSON string or it is nothing. install.sh's scanner
+# emits only string values, so a number or an array reads there as a missing
+# field; this refuses it by name instead, which is the more useful of the two
+# and rejects exactly the same documents.
+function Get-ManifestString($Value, [string]$Field, [string]$ManifestUrl) {
+    if ($null -eq $Value) { return $null }
+    if ($Value -isnot [string]) {
+        Fail "Manifest at $ManifestUrl declares `"$Field`" as a $($Value.GetType().Name), not a string. Every field this installer reads has to be a JSON string. Refusing to continue."
+    }
+    return $Value
+}
+
 function Set-Current([string]$Target) {
     try {
         $currentLink = Join-Path $AppDir "current"
@@ -207,7 +233,13 @@ try {
     Fail "Could not read the channel manifest from $ManifestUrl`nCheck your network connection, and that TWINFORGE_CHANNEL=$Channel names a real channel.`n$($_.Exception.Message)"
 }
 
-$Version = $Manifest.version
+# A top-level JSON array would make every property read below return an array
+# of member values, which is the collection-filter problem again one level up.
+if ($Manifest -is [System.Array]) {
+    Fail "Manifest at $ManifestUrl is a JSON array, not a JSON object. It may be malformed, or the channel may not exist yet."
+}
+
+$Version = Get-ManifestString $Manifest.version "version" $ManifestUrl
 if (-not $Version) {
     Fail "Manifest at $ManifestUrl has no 'version' field. It may be malformed, or the channel may not exist yet."
 }
@@ -223,8 +255,8 @@ if (($Version -notmatch '\A[A-Za-z0-9._-]+\z') -or ($Version -eq ".") -or ($Vers
     Fail "Manifest at $ManifestUrl declares an unusable version '$Version'. Expected only letters, digits, dot, underscore and hyphen (and not '.' or '..'), because the version is used as a directory name. Refusing to continue."
 }
 
-$ArtifactUrl = Get-ArtifactField $Manifest "url"
-$ArtifactSha256 = Get-ArtifactField $Manifest "sha256"
+$ArtifactUrl = Get-ManifestString (Get-ArtifactField $Manifest "url") "artifacts.$PlatformTag.url" $ManifestUrl
+$ArtifactSha256 = Get-ManifestString (Get-ArtifactField $Manifest "sha256") "artifacts.$PlatformTag.sha256" $ManifestUrl
 if (-not $ArtifactUrl -or -not $ArtifactSha256) {
     Fail "Manifest at $ManifestUrl has no artifact for platform $PlatformTag."
 }
