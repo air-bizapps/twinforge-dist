@@ -305,14 +305,17 @@ function Get-ManifestKeys {
         $overrideModulus = [System.IO.File]::ReadAllText($env:TWINFORGE_DIST_PUBKEY_MODULUS_FILE).Trim()
         return @(@{ KeyId = "local-test"; ModulusBase64 = $overrideModulus })
     }
-    # A plain `@()`, and the single caller wraps what it gets in `@(...)`.
-    # Returning `, @()` -- the usual guard against PowerShell unrolling an array
-    # on the way out -- is wrong here and was caught by the test for the shipped
-    # state: `@(Get-ManifestKeys)` then holds one element, the empty array
-    # itself, so a build carrying no keys at all reported one key with a blank
-    # id and refused with the wrong sentence. Emitting nothing is what an empty
-    # list has to look like.
-    return @()
+    # If this list is ever emptied, it must be emitted as a plain `@()`, and the
+    # single caller wraps what it gets in `@(...)`. Returning `, @()` -- the
+    # usual guard against PowerShell unrolling an array on the way out -- is
+    # wrong here and was caught by the test for the shipped state:
+    # `@(Get-ManifestKeys)` then holds one element, the empty array itself, so a
+    # build carrying no keys at all reported one key with a blank id and refused
+    # with the wrong sentence. Emitting nothing is what an empty list has to
+    # look like.
+    return @(
+        @{ KeyId = "2026-08-canary"; ModulusBase64 = "4cL70zPjyEgukxZuYUCsiTFj0hkNKQENK62WGiPFzwVFLShbpp1VpGQs7I7GszdEIzFwtnUBGHuM8UBT0aEI3eV3mgWgCnvxotJsV9nS46nJ/qbHCxsVniv7ZmsCrfbpSFB1oDXkB3nWHpE77RbxaeunyBWwS0FZx6n35UF+6ChSzOKlFdIeeVg8PPZ0u90p6mRsKKz2O8IDA4FqzoyeL/UdmmEQ1E98gMozg/JMXB7D+hF5lWF+2mqnhJmuysOaO75HUbDNhAS57MUQX3B/F0Cr2rtwKH04hSXT43XF7EiBclpT5GwLBqaVGvqi0yWwBfv1qkzhcTVABlmYofZdc6OmZbr5FloJHuO8JMpXscTAkF3II1BTS17spWGutfjuzOeCkIjQsxEiSNt/RaCJNI9YDgTKjySeYUclV5qJJwEex7bWXxiqUTugHpdp1uK93gK26venr94Y5EIMvApID2UrQAjhtNVgbiDQcxgEOpEXXUTR2hGARjI80KvBcxWr" }
+    )
 }
 
 # Every field the signed format requires, checked before the manifest is read

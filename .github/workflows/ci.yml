@@ -53,9 +53,12 @@ jobs:
       # truncated signature, a renamed channel, an unknown keyId, and no keys at
       # all.
       - run: sh tests/signature-test.sh
-      # The same key in two representations, one per installer. Passes today by
-      # agreeing that both lists are empty; it is the check that matters on the
-      # day the signing ceremony adds the first real key.
+      # The same key in two representations, one per installer. Now that the
+      # ceremony has put a real key in both, this compares actual key material:
+      # modulus, exponent and size. The third copy -- the one inside the release
+      # tarball, which is what the updater verifies with -- lives in the monorepo
+      # and cannot be seen from here; packaging/install-script.test.mjs there is
+      # what asserts all three agree.
       - run: sh tests/key-parity-test.sh
 
       # The Windows job verifies signatures that *openssl* made, not ones .NET

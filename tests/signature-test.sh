@@ -188,6 +188,14 @@ refuses "an unknown keyId is refused, even with a signature that would verify" "
 # shellcheck disable=SC2317,SC2329
 verify_with_no_keys() {
   unset TWINFORGE_DIST_PUBKEY_FILE
+  # Forced, not inherited. This used to just unset the override and lean on the
+  # shipped list being empty -- which was true only until the first real key was
+  # added, and then the case stopped testing "no keys at all" and started
+  # testing "a key id this build does not carry", silently, under the old name.
+  # A test whose meaning depends on today's shipped state is a test that will
+  # change meaning without changing text. `refuses` runs its callee in `$( ... )`,
+  # so this redefinition dies with the subshell.
+  manifest_key_material() { :; }
   verify_manifest_signature "$@"
 }
 # shellcheck disable=SC2317,SC2329

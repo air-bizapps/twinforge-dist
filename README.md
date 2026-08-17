@@ -118,20 +118,23 @@ primeira release. Até lá os instaladores buscam o manifest e param num 404.
 
 ### Antes de publicar a primeira release
 
-Os verificadores já estão nos dois instaladores, e **a lista de chaves aceitas está vazia** — o que
-significa que hoje eles recusam todo manifest. Isso é a decisão, não um pendência: falhar fechado é o
-desenho, e uma fase "aceita qualquer coisa enquanto a gente se organiza" é exatamente o buraco que
-quem consegue escrever neste repositório usaria.
+Os verificadores estão nos dois instaladores e a chave pública `2026-08-canary` já está embutida nos
+dois. Ainda assim **nenhuma release é instalável hoje**, e continua sendo de propósito: falta o job
+que assina, então não existe `.sig` que os verificadores aceitem. Falhar fechado é o desenho, e uma
+fase "aceita qualquer coisa enquanto a gente se organiza" é exatamente o buraco que quem consegue
+escrever neste repositório usaria.
 
-O que falta é a **cerimônia da chave**, descrita na §3 do desenho
+O que falta é a outra metade da **cerimônia da chave**, descrita na §3 do desenho
 (`docs/superpowers/specs/2026-08-17-assinatura-do-manifest-design.md`, no repositório de produto): um
 job `sign` separado, num Environment com revisor obrigatório, cujo único segredo é a chave privada e
-cujo único produto é o `.sig`. Enquanto ela não acontecer, nenhuma release é instalável — de propósito.
+cujo único produto é o `.sig`.
 
-Quando acontecer, a chave entra em **dois lugares**: como PEM no `install.sh` e como módulo em base64
-no `install.ps1` (o PowerShell 5.1 não tem parser de PEM). `tests/key-parity-test.sh` é o que afirma
-que as duas são a mesma chave, com o mesmo id, com expoente 65537 e com pelo menos 3072 bits. Duas
-cópias de uma chave que divergem em silêncio é um modo de falha real: o instalador que continua
+A chave vive em **três lugares**: como PEM no `install.sh`, como módulo em base64 no `install.ps1` (o
+PowerShell 5.1 não tem parser de PEM) e como `publicKeyPem` dentro do tarball de release — esta
+última é a que o updater usa. `tests/key-parity-test.sh` afirma que as duas cópias visíveis daqui são
+a mesma chave, com o mesmo id, expoente 65537 e ao menos 3072 bits; a terceira só é comparável do
+repositório de produto, e é `packaging/install-script.test.mjs` lá que afirma que as três batem.
+Cópias de uma chave que divergem em silêncio é um modo de falha real: o instalador que continua
 funcionando esconde o que parou, até alguém no outro sistema operacional tentar.
 
 ## Alterar os instaladores

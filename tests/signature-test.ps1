@@ -176,9 +176,17 @@ Assert-Refuses "an unknown keyId is refused, even with a signature that would ve
 Assert-Refuses "with no keys at all, a good signature is still refused" "carries no manifest signing keys" {
     $previous = $env:TWINFORGE_DIST_PUBKEY_MODULUS_FILE
     try {
-        # The shipped state: Get-ManifestKeys returns the empty list compiled
-        # into install.ps1.
+        # Forced, not inherited. This used to only clear the override and lean on
+        # the list compiled into install.ps1 being empty -- true until the signing
+        # ceremony put a real key there, at which point the case stopped testing
+        # "no keys at all" and started testing "a key id this build does not
+        # carry", under the old name. A test whose meaning depends on today's
+        # shipped state changes meaning without changing text.
+        #
+        # `& $Action` runs this block in a child scope, so this definition shadows
+        # the lifted one for the call below and dies with the block.
         $env:TWINFORGE_DIST_PUBKEY_MODULUS_FILE = $null
+        function Get-ManifestKeys { @() }
         Test-ManifestSignature $GoodBytes $GoodSignature "local-test" "URL"
     } finally {
         $env:TWINFORGE_DIST_PUBKEY_MODULUS_FILE = $previous
