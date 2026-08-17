@@ -238,6 +238,35 @@ function Get-PathEntryKey([string]$Entry) {
 # 1024-character truncation people remember belongs to setx and the legacy
 # System Properties dialog; nothing here asserts either way, and nothing here
 # truncates.
+# Belt and braces behind the staging decision below: both ends are under $AppDir
+# now, so an ordinary install never reaches the fallback. It exists because
+# $AppDir\versions can itself be a junction onto another volume — people do
+# relocate directories that grow to a few hundred MiB each — and there the
+# rename is a cross-volume move again.
+#
+# The fallback runs only after Move-Item has already failed, so it cannot make
+# a working case worse; and if the copy fails too, the *original* error is what
+# gets reported, because that is the one that describes the real problem.
+#
+# UNVERIFIED: the exception type and message the provider raises for a
+# cross-volume directory move. Nothing here matches on either — any move
+# failure is retried as a copy — precisely because that shape could not be
+# checked.
+function Move-Directory([string]$From, [string]$To) {
+    try {
+        Move-Item -LiteralPath $From -Destination $To
+        return
+    } catch {
+        $moveError = $_
+    }
+    try {
+        Copy-Item -LiteralPath $From -Destination $To -Recurse -Force
+        Remove-Item -LiteralPath $From -Recurse -Force
+    } catch {
+        throw $moveError
+    }
+}
+
 function Add-BinToUserPath {
     $binDir = Join-Path $AppDir "bin"
     $binKey = Get-PathEntryKey $binDir
@@ -459,11 +488,34 @@ if ((Test-Path $InstalledMarker) -and (Test-Path $LauncherPath)) {
 
 # --- Download, verify, then extract --------------------------------------------
 
-$WorkDir = Join-Path ([System.IO.Path]::GetTempPath()) "twinforge-install-$([guid]::NewGuid())"
+# The working directory lives under $AppDir, not under %TEMP%.
+#
+# The FileSystem provider refuses to move a *directory* across volumes: unlike
+# POSIX mv, Move-Item has no copy-and-unlink fallback. With the work directory
+# under [System.IO.Path]::GetTempPath() and the destination under %USERPROFILE%
+# or TWINFORGE_HOME, anyone whose %TEMP% is redirected to another drive, or who
+# sets TWINFORGE_HOME=D:\..., downloaded a few hundred MiB, verified it,
+# extracted it, and then died on the last step. Every time, not intermittently,
+# and re-running did not help.
+#
+# Staging on the destination volume was chosen over adding a copy fallback,
+# because it does more than avoid the error: $VersionsDir is a child of $AppDir,
+# so the move that commits the payload becomes a rename within one directory —
+# atomic, instant, and with no half-copied tree to reason about — instead of a
+# few hundred MiB copied a second time. It is the same reason the monorepo's
+# updater stages beside its target (packaging/updater/check-for-update.mjs).
+#
+# The cost, accepted: the download and the unpacked tree occupy space under the
+# install root rather than under %TEMP% while the install runs, and a hard kill
+# leaves that directory behind. The name starts with a dot and is not under
+# versions\, so nothing enumerating installed versions can read it as one, and
+# the `finally` below removes it on every ordinary exit.
+$WorkId = [guid]::NewGuid().ToString("N")
+$WorkDir = Join-Path $AppDir ".install+$WorkId"
 try {
     New-Item -ItemType Directory -Path $WorkDir -Force | Out-Null
 } catch {
-    Fail "Could not create a temporary working directory at $WorkDir.`n$($_.Exception.Message)"
+    Fail "Could not create a working directory at $WorkDir.`nCheck that $AppDir is writable and that the drive has room for a few hundred MiB, then re-run this script.`n$($_.Exception.Message)"
 }
 try {
     $TarballPath = Join-Path $WorkDir "twinforge.tar.gz"
@@ -532,7 +584,7 @@ try {
         New-Item -ItemType Directory -Path $VersionsDir -Force | Out-Null
         New-Item -ItemType Directory -Path (Join-Path $AppDir "bin") -Force | Out-Null
         Copy-Item -Path (Join-Path $ExtractedBinDir "*") -Destination (Join-Path $AppDir "bin") -Recurse -Force
-        Move-Item -Path $ExtractedVersionDir -Destination $VersionDir
+        Move-Directory $ExtractedVersionDir $VersionDir
         New-Item -ItemType File -Path $InstalledMarker -Force | Out-Null
     } catch {
         Fail "Could not install TwinForge $Version into $AppDir.`n$($_.Exception.Message)"
