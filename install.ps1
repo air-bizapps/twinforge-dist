@@ -52,6 +52,64 @@ function Fail([string]$Message) {
     throw "TwinForge install aborted."
 }
 
+# --- URL validation ------------------------------------------------------------
+# Nothing validated the artifact URL before it reached Invoke-WebRequest, and
+# the checksum is no defence here because the *fetch itself* is the payload.
+#
+# On Windows PowerShell 5.1 Invoke-WebRequest routes anything that is not http
+# or https through WebRequest.Create, which happily returns a FileWebRequest. A
+# manifest publishing file://///evil.example.com/share/a.tar.gz — or a bare UNC
+# path, which [uri] coercion turns into a file URI — makes the OS open an SMB
+# connection to the attacker's host and negotiate NTLM with the developer's
+# credentials. That happens before a single byte is hashed. ftp:// is live on
+# 5.1 for the same reason.
+#
+# So the rule is the one the monorepo's updater already applies to the same
+# field (packaging/updater/check-for-update.mjs, `assertHttpsUrl`) and the one
+# install.sh applies (`assert_https_url`): https://, or refuse. The message is
+# install.sh's, so a manifest one installer rejects the other rejects with the
+# same words.
+#
+# UNVERIFIED: PowerShell 7 uses HttpClient, which rejects file:// outright, so
+# the credential-capture half of this is believed to be 5.1-specific. Neither
+# runtime was available to confirm it. The check is unconditional either way.
+function Assert-HttpsUrl([string]$Url, [string]$ManifestUrl, [string]$VersionLabel) {
+    # Rejected before the scheme check so the message can be specific: a URL
+    # with whitespace or control characters in it is not a URL, and it is also
+    # how a manifest would forge extra lines into the messages this script
+    # prints. Printable ASCII only, matching install.sh's *[!!-~]* class.
+    if ($Url -match '[^\x21-\x7E]') {
+        Fail "Manifest at $ManifestUrl points $VersionLabel at a URL containing whitespace or control characters. Refusing to continue."
+    }
+    # [uri] on a string that is not a URL does not throw — it builds a
+    # *relative* URI, whose .Scheme property then throws instead. Hence the
+    # IsAbsoluteUri test before the scheme is ever read.
+    $parsed = $null
+    try { $parsed = [uri]$Url } catch { $parsed = $null }
+    if ((-not $parsed) -or (-not $parsed.IsAbsoluteUri) -or ($parsed.Scheme -ne "https")) {
+        Fail "Manifest at $ManifestUrl points $VersionLabel at `"$Url`". Releases are downloaded over https:// only. Refusing to continue."
+    }
+}
+
+# The manifest URL is built from TWINFORGE_DIST_BASE_URL, which is a documented
+# local-testing override set by the person running the script, not a value the
+# manifest gets to choose — so it is not forced to https, exactly as install.sh
+# leaves it unforced. It *is* held to http or https, which install.sh has no
+# need to do: curl only ever downloads with the scheme it is given, while
+# Invoke-WebRequest on 5.1 turns file:// and a UNC path into an SMB round trip
+# that leaks credentials. Anything a local test wants (http://localhost:8080,
+# https://…) still works.
+function Assert-ManifestUrl([string]$Url) {
+    if ($Url -match '[^\x21-\x7E]') {
+        Fail "The channel manifest URL contains whitespace or control characters. Check TWINFORGE_DIST_BASE_URL. Refusing to continue."
+    }
+    $parsed = $null
+    try { $parsed = [uri]$Url } catch { $parsed = $null }
+    if ((-not $parsed) -or (-not $parsed.IsAbsoluteUri) -or (($parsed.Scheme -ne "https") -and ($parsed.Scheme -ne "http"))) {
+        Fail "The channel manifest URL `"$Url`" is not an http:// or https:// URL.`nTWINFORGE_DIST_BASE_URL is a local-testing override; set it to an http or https base URL, or unset it to use the default. Refusing to continue."
+    }
+}
+
 $Channel = if ($env:TWINFORGE_CHANNEL) { $env:TWINFORGE_CHANNEL } else { "canary" }
 $BaseUrl = if ($env:TWINFORGE_DIST_BASE_URL) { $env:TWINFORGE_DIST_BASE_URL } else { "https://raw.githubusercontent.com/air-bizapps/twinforge-dist/main" }
 $HomeDir = if ($env:TWINFORGE_HOME) { $env:TWINFORGE_HOME } else { Join-Path $env:USERPROFILE ".twinforge" }
@@ -113,6 +171,7 @@ function Write-NextSteps {
 # --- Fetch and read the channel manifest ---------------------------------------
 
 $ManifestUrl = "$BaseUrl/channels/$Channel.json"
+Assert-ManifestUrl $ManifestUrl
 Write-Host "Fetching the $Channel channel manifest..."
 # Fetch the bytes and parse them ourselves rather than letting Invoke-RestMethod
 # decide. Invoke-RestMethod only deserializes when the response carries a JSON
@@ -124,7 +183,19 @@ Write-Host "Fetching the $Channel channel manifest..."
 # they ever run. Parsing unconditionally is correct for any content type the
 # host sends.
 try {
-    $ManifestBody = (Invoke-WebRequest -Uri $ManifestUrl -UseBasicParsing).Content
+    # -MaximumRedirection: Invoke-WebRequest follows redirects by default with
+    # no bound, so a chain can be walked as far as the server likes. Five is
+    # more than any real release host needs (raw.githubusercontent.com and the
+    # GitHub release CDN each use one).
+    #
+    # UNVERIFIED: whether a redirect can walk an https URL down to http, or to
+    # a non-http scheme, and whether .NET Framework's HttpWebRequest refuses
+    # that on its own. curl is told explicitly (install.sh passes --proto-redir
+    # '=https'); Invoke-WebRequest has no equivalent switch before PowerShell
+    # 7.4's -AllowInsecureRedirect, and hand-rolling the redirect loop to check
+    # each hop is exactly the kind of unrunnable code this file should not grow.
+    # The artifact is checksum-verified regardless of how it was reached.
+    $ManifestBody = (Invoke-WebRequest -Uri $ManifestUrl -UseBasicParsing -MaximumRedirection 5).Content
     # Windows PowerShell 5.1 hands back .Content as a byte array rather than a
     # string for content types it does not classify as text, so decode when
     # that is what arrived. Whichever shape it is, it is parsed the same way.
@@ -157,6 +228,7 @@ $ArtifactSha256 = Get-ArtifactField $Manifest "sha256"
 if (-not $ArtifactUrl -or -not $ArtifactSha256) {
     Fail "Manifest at $ManifestUrl has no artifact for platform $PlatformTag."
 }
+Assert-HttpsUrl $ArtifactUrl $ManifestUrl $Version
 
 $VersionsDir = Join-Path $AppDir "versions"
 $VersionDir = Join-Path $VersionsDir $Version
@@ -206,7 +278,7 @@ try {
     $PreviousProgressPreference = $ProgressPreference
     $ProgressPreference = "SilentlyContinue"
     try {
-        Invoke-WebRequest -Uri $ArtifactUrl -OutFile $TarballPath -UseBasicParsing
+        Invoke-WebRequest -Uri $ArtifactUrl -OutFile $TarballPath -UseBasicParsing -MaximumRedirection 5
     } catch {
         Fail "Download failed: $ArtifactUrl`nCheck your network connection and try again.`n$($_.Exception.Message)"
     } finally {
