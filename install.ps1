@@ -517,6 +517,12 @@ try {
 } catch {
     Fail "Could not create a working directory at $WorkDir.`nCheck that $AppDir is writable and that the drive has room for a few hundred MiB, then re-run this script.`n$($_.Exception.Message)"
 }
+# The two siblings the replacement is swapped through, and the flag that says
+# which of them currently holds the only usable copy of this version. Declared
+# out here because the `finally` below reads all three.
+$IncomingDir = Join-Path $VersionsDir ".incoming+$WorkId"
+$AsideDir = Join-Path $VersionsDir ".old+$WorkId"
+$AsideHoldsTheLiveVersion = $false
 try {
     $TarballPath = Join-Path $WorkDir "twinforge.tar.gz"
     Write-Host "Downloading TwinForge $Version for $PlatformTag... (a few hundred MiB; no progress is shown)"
@@ -571,26 +577,94 @@ try {
         Fail "Downloaded archive has no bin\ directory. This looks like a packaging bug, not a network problem — please report it."
     }
 
+    # --- Commit ----------------------------------------------------------------
+    # The old sequence deleted $VersionDir and only then moved the new tree in.
+    # Anything at all in between — the cross-volume failure above, a lock on a
+    # file under it, a full disk, Ctrl-C — left the developer with no copy of
+    # that version, `current` dangling, and no marker to record that a
+    # half-install had happened. Recovery needed a successful network round
+    # trip, from a machine that had just failed one.
+    #
+    # So the incoming tree lands *beside* the target first, and the old one is
+    # only moved aside once that has succeeded. This is the shape the monorepo's
+    # updater arrived at after the same defect (`runUpdateCheck` in
+    # packaging/updater/check-for-update.mjs): the move that can fail for
+    # interesting reasons is the one that destroys nothing, and the two after it
+    # are renames between siblings in the same directory.
+    #
+    # `+` in the staging names: it is outside the character class a version is
+    # allowed to use, so no published version can ever collide with one of
+    # these, and the leading dot keeps them out of a versions\* enumeration.
     try {
-        # A previous run may have been interrupted after $VersionDir was
-        # created but before the marker was written. Move-Item onto an
-        # existing directory would merge into it instead of replacing it, so
-        # clear that stale, unmarked state first. bin\ is populated, and the
-        # marker written, only after the version directory is committed below
-        # — see $InstalledMarker above for why the ordering matters.
-        if (Test-Path $VersionDir) {
-            Remove-Item -Path $VersionDir -Recurse -Force
-        }
         New-Item -ItemType Directory -Path $VersionsDir -Force | Out-Null
+    } catch {
+        Fail "Could not create $VersionsDir.`nCheck that $AppDir is writable, then re-run this script.`n$($_.Exception.Message)"
+    }
+    try {
+        Move-Directory $ExtractedVersionDir $IncomingDir
+    } catch {
+        Fail "Could not stage TwinForge $Version at $IncomingDir.`nA full disk is the usual cause. Free some space and re-run this script.`n$($_.Exception.Message)"
+    }
+
+    # A previous run may have been interrupted after $VersionDir was created but
+    # before the marker was written, and a move onto an existing directory would
+    # merge into it rather than replace it. Whatever is there — a complete
+    # install or that debris — goes aside rather than being deleted, and is only
+    # reclaimed in the `finally` once the new tree is in place.
+    if (Test-Path -LiteralPath $VersionDir) {
+        try {
+            Move-Item -LiteralPath $VersionDir -Destination $AsideDir
+            $AsideHoldsTheLiveVersion = $true
+        } catch {
+            Fail "Could not move the existing $VersionDir aside.`nSomething may still be running from it; close it and re-run this script.`n$($_.Exception.Message)"
+        }
+    }
+    try {
+        Move-Item -LiteralPath $IncomingDir -Destination $VersionDir
+        $AsideHoldsTheLiveVersion = $false
+    } catch {
+        $swapError = $_
+        if ($AsideHoldsTheLiveVersion) {
+            # The one failure that has to be repaired rather than cleaned up.
+            try {
+                Move-Item -LiteralPath $AsideDir -Destination $VersionDir
+                $AsideHoldsTheLiveVersion = $false
+            } catch {
+                Fail "Could not install TwinForge $Version into $VersionDir ($($swapError.Exception.Message)), and the copy that was there could not be put back ($($_.Exception.Message)).`nIt has not been deleted: it is at $AsideDir. Move that directory back to $VersionDir to restore this install."
+            }
+        }
+        Fail "Could not install TwinForge $Version into $VersionDir.`nThe copy that was there before is untouched.`n$($swapError.Exception.Message)"
+    }
+
+    # bin\ after the payload, never before. bin\ is shared across every
+    # installed version, so writing it first replaces the launcher of the
+    # install that currently works — and then the move above is the step most
+    # likely to fail. The comment that used to sit here claimed this ordering
+    # while the code did the opposite; install.sh had the same wrong comment and
+    # the same inversion, and both now match what they say.
+    try {
         New-Item -ItemType Directory -Path (Join-Path $AppDir "bin") -Force | Out-Null
         Copy-Item -Path (Join-Path $ExtractedBinDir "*") -Destination (Join-Path $AppDir "bin") -Recurse -Force
-        Move-Directory $ExtractedVersionDir $VersionDir
+    } catch {
+        Fail "Could not install the TwinForge launcher into $AppDir\bin.`n$($_.Exception.Message)"
+    }
+    try {
         New-Item -ItemType File -Path $InstalledMarker -Force | Out-Null
     } catch {
-        Fail "Could not install TwinForge $Version into $AppDir.`n$($_.Exception.Message)"
+        Fail "TwinForge $Version is installed, but the marker at $InstalledMarker could not be written, so re-running would download it all over again.`nCheck that $VersionDir is writable, then re-run this script.`n$($_.Exception.Message)"
     }
 } finally {
-    Remove-Item -Path $WorkDir -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $WorkDir -Recurse -Force -ErrorAction SilentlyContinue
+    # Only ever this run's own leftover.
+    Remove-Item -LiteralPath $IncomingDir -Recurse -Force -ErrorAction SilentlyContinue
+    # $true means $VersionDir holds nothing usable and this directory holds what
+    # it should. Nothing may delete it in that state — it is not a leftover
+    # then, it is the version, and the message above tells the developer where
+    # to find it. Otherwise it is the superseded copy, and reclaiming it is
+    # best-effort: the install has already succeeded by the time this runs.
+    if (-not $AsideHoldsTheLiveVersion) {
+        Remove-Item -LiteralPath $AsideDir -Recurse -Force -ErrorAction SilentlyContinue
+    }
 }
 
 Set-Current $VersionDir
