@@ -15,6 +15,28 @@
 #   TWINFORGE_HOME          overrides the install root (default:
 #                           $env:USERPROFILE\.twinforge), matching what the
 #                           installed server itself honors.
+#
+# Everything below lives inside one script block, invoked once at the bottom of
+# the file. That is not a style choice. The documented entry point is
+# `irm ... | iex`, and Invoke-Expression executes the string it is given in the
+# *caller's own session* — it creates no scope of its own. Written flat, this
+# file defined Fail, Set-Current, Get-ArtifactField, Add-BinToUserPath,
+# Write-NextSteps, $Version, $Manifest, $Channel, $arch, $WorkDir and $AppDir in
+# the developer's live session, clobbering whatever they had under those names,
+# and left $ErrorActionPreference = "Stop" set there for the rest of the day —
+# so the next Get-ChildItem over a folder with one unreadable subdirectory
+# terminated their pipeline instead of continuing, with nothing to connect it
+# back to an installer that had failed at the checksum an hour earlier.
+#
+# `& { ... }` runs the block in a child scope: the functions and the variables
+# below (including the two preference variables) are discarded when it returns,
+# and a `throw` inside it still unwinds all the way out — which is what Fail
+# relies on. The wrapper also means a truncated response cannot half-run this
+# file: iex parses the whole string before executing any of it, and a cut
+# anywhere inside the block is a syntax error rather than a script that stops
+# in the middle of the install.
+
+& {
 
 $ErrorActionPreference = "Stop"
 
@@ -23,8 +45,9 @@ function Fail([string]$Message) {
     # `irm ... | iex`, which executes it in the *caller's own session* rather
     # than a child process. `exit` there would close the developer's whole
     # terminal instead of just stopping the install. `throw` unwinds through
-    # any open try/finally (so temp-dir cleanup still runs) and stops at the
-    # top of the script without touching the host session.
+    # any open try/finally (so working-directory cleanup still runs) and out of
+    # the enclosing script block, stopping the install without touching the
+    # host session.
     Write-Host $Message -ForegroundColor Red
     throw "TwinForge install aborted."
 }
@@ -156,9 +179,9 @@ if ((Test-Path $InstalledMarker) -and (Test-Path $LauncherPath)) {
     Set-Current $VersionDir
     Add-BinToUserPath
     Write-NextSteps
-    # `return`, not `exit`: at this top level (not inside a function) it ends
-    # the script the same way reaching the end of the file would, without the
-    # `exit`-via-iex risk described in Fail above.
+    # `return`, not `exit`: at the top level of the block (not inside a
+    # function) it ends the block the same way reaching its closing brace
+    # would, without the `exit`-via-iex risk described in Fail above.
     return
 }
 
@@ -249,3 +272,7 @@ try {
 Set-Current $VersionDir
 Add-BinToUserPath
 Write-NextSteps
+
+# The closing brace of the block opened at the top of the file, and the `&`
+# that runs it. Nothing may be added below this line.
+}
