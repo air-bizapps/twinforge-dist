@@ -20,12 +20,12 @@
 # anything is the `main "$@"` at the end. That is not a style choice:
 # the documented entry point is `curl ... | sh`, and a shell reading a script
 # from a pipe executes each complete statement as it arrives. If the response
-# is cut short mid-file — a dropped connection, a proxy timing out, a CDN
-# error page — a script written as a flat sequence has already run everything
+# is cut short mid-file -- a dropped connection, a proxy timing out, a CDN
+# error page -- a script written as a flat sequence has already run everything
 # up to the cut, and then exits 0 because it reached EOF cleanly. That is how a
 # truncated download can delete an installed version and report success. With
 # the body inside `main`, a truncated stream ends before `main` is ever called,
-# so it cannot run any of it — and the brace group below closes the remaining
+# so it cannot run any of it -- and the brace group below closes the remaining
 # gap. `set -eu` is inside `main` for the same reason: a
 # file cut in the middle of a top-level `set -eu` leaves a bare `set` as its
 # last complete statement, which dumps the whole environment to stdout.
@@ -41,8 +41,8 @@
 # error and nothing at all runs.
 {
 
-# printf, never echo. Under dash — /bin/sh on Debian and Ubuntu, so most of the
-# audience — and under macOS /bin/sh, `echo` expands backslash escapes in its
+# printf, never echo. Under dash -- /bin/sh on Debian and Ubuntu, so most of the
+# audience -- and under macOS /bin/sh, `echo` expands backslash escapes in its
 # argument. The messages below interpolate $ARTIFACT_URL and $ARTIFACT_SHA256
 # straight from the manifest, so a `url` containing \c truncates the rest of the
 # message under dash, deleting exactly the line "The download may be corrupted
@@ -64,7 +64,7 @@ need_cmd() {
 # Defines sha256_of() against whichever of the two tools this machine has.
 #
 # The file arrives on stdin rather than as an argument. Given a path containing
-# a backslash or a newline — $TMPDIR is whatever the environment says it is —
+# a backslash or a newline -- $TMPDIR is whatever the environment says it is --
 # both tools escape the filename and prefix the whole line with a backslash, so
 # `awk {print $1}` returns \<hash>, which then fails the comparison with the
 # tampering warning. Reading stdin means there is no filename in the output to
@@ -80,7 +80,7 @@ select_sha256_tool() {
 }
 
 # --- Manifest parsing ---------------------------------------------------------
-# Still no jq — it is not guaranteed present, and requiring it would turn a
+# Still no jq -- it is not guaranteed present, and requiring it would turn a
 # missing package into a failed install. What is required is awk, which POSIX
 # mandates and which this script already used for the checksum.
 #
@@ -88,12 +88,12 @@ select_sha256_tool() {
 # then took the first `url`/`sha256` in it. That is only correct if the manifest
 # is pretty-printed one key per line. Reproduced on a `jq -c` manifest: the
 # range matched the whole document, so a Mac got the *first* url and the *first*
-# sha256 in the file — the linux-x64 pair. Both fields came from the same wrong
+# sha256 in the file -- the linux-x64 pair. Both fields came from the same wrong
 # block, so they agreed, the checksum verified, extraction succeeded, and the
 # installer reported success while installing another platform's tarball. No
 # attacker needed: anyone regenerating the manifest without an indent argument.
 #
-# So the manifest is scanned as JSON — whitespace-independent, depth-aware,
+# So the manifest is scanned as JSON -- whitespace-independent, depth-aware,
 # and loud on anything malformed rather than helpfully returning a neighbour's
 # value. `version` is read at the top level only (the old grep took the first
 # match anywhere, so a `version` nested inside an earlier artifact object won,
@@ -229,15 +229,15 @@ manifest_field() {
 #
 #   1. A value starting with `-` is read by curl as an *option*. A manifest
 #      whose url is `-Kcfg.txt` makes curl read a config file from the
-#      developer's working directory instead of downloading anything —
-#      honouring its `output =` and `url =` directives — and exit 0, so the
+#      developer's working directory instead of downloading anything --
+#      honouring its `output =` and `url =` directives -- and exit 0, so the
 #      caller's error check sees a successful download. The checksum is no
 #      defence: this changes what curl *does*, not what it downloads. `--`
 #      before the URL in the calls below closes the option-position half.
 #   2. curl accepts every scheme libcurl was built with. `file:///dev/zero`
 #      wrote 6.8 GB in five seconds here before it was killed.
 #
-# So the URL is required to be https:// — the same rule, and the same message,
+# So the URL is required to be https:// -- the same rule, and the same message,
 # that the updater applies in the monorepo (packaging/updater/check-for-update.mjs,
 # `assertHttpsUrl`), so a manifest that one accepts the other accepts too.
 assert_https_url() {
@@ -260,8 +260,8 @@ assert_https_url() {
 
 point_current() {
   # `ln` relies on $APP_DIR/current being a symlink or absent. If it is a real
-  # directory — an earlier extraction that landed in the wrong place, a manual
-  # copy — GNU ln fails with "cannot overwrite directory", which on the
+  # directory -- an earlier extraction that landed in the wrong place, a manual
+  # copy -- GNU ln fails with "cannot overwrite directory", which on the
   # already-installed path arrived immediately after the line saying the install
   # was fine. install.ps1:56-67 wraps the same step in a try/catch with a real
   # message; this is that message.
@@ -295,7 +295,7 @@ path_profile_file() {
       if [ "$os_tag" = darwin ]; then
         # Terminal and iTerm open login shells, which read the first of
         # .bash_profile, .bash_login, .profile that exists and stop there. So
-        # append to whichever that is — and only create .bash_profile when none
+        # append to whichever that is -- and only create .bash_profile when none
         # of them exists, because creating it in front of an existing .profile
         # would stop .profile being read at all.
         if [ -f "$HOME/.bash_profile" ]; then say "$HOME/.bash_profile"
@@ -341,15 +341,15 @@ add_bin_to_path() {
   fi
 
   # The exact line, not a substring of it. `grep -qF "$bin_dir"` matched the
-  # directory anywhere in the file — inside a comment, inside an unrelated
-  # PATH — while missing the same line written with $HOME unexpanded, so the
+  # directory anywhere in the file -- inside a comment, inside an unrelated
+  # PATH -- while missing the same line written with $HOME unexpanded, so the
   # second run appended a duplicate. Matching the whole line against the line
   # this script writes is exact for the case that matters: its own second run.
   if [ -f "$profile" ] && grep -qxF "$path_line" "$profile" 2>/dev/null; then
     return 0
   fi
   # This one must never fail the install. It runs after everything is installed
-  # and correct, and a read-only profile is ordinary — dotfiles managed by
+  # and correct, and a read-only profile is ordinary -- dotfiles managed by
   # chezmoi or stow, or a file left root-owned by an earlier sudo run. Under a
   # bare `set -e` that `>>` exited before the next-steps output and re-running
   # failed at the identical spot forever, insisting a complete, working install
@@ -392,7 +392,7 @@ main() {
 
   # C, not the user's locale. Every character class below (the version name,
   # the hash, the URL) is collated by the locale otherwise, so what counts as
-  # A-Z or as a printable character stops being a fixed set — and grep, sed and
+  # A-Z or as a printable character stops being a fixed set -- and grep, sed and
   # awk stop being deterministic across the machines this runs on.
   LC_ALL=C
   export LC_ALL
@@ -410,7 +410,7 @@ main() {
   # `sudo sh -c "$(curl ...)"` is a thing people do to installers, and this one
   # would have gone along with it: $HOME is root's, so it installs into
   # /root/.twinforge, adds the PATH line to root's profile, and reports success
-  # — leaving the developer with nothing on their own account. Being root
+  # -- leaving the developer with nothing on their own account. Being root
   # inside a container image is different and stays allowed; $SUDO_USER is what
   # separates the two.
   if [ "$(id -u)" -eq 0 ] && [ -n "${SUDO_USER:-}" ]; then
@@ -452,7 +452,7 @@ main() {
   WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/twinforge-install.XXXXXX")"
   # INT and TERM re-raise rather than just running cleanup and returning. A
   # handler that returns hands control back to the shell, which carries on with
-  # the next command — so a Ctrl-C landing between two commands was absorbed
+  # the next command, so a Ctrl-C landing between two commands was absorbed
   # entirely and the install continued, with its temp directory already deleted.
   # Removing the handler and killing ourselves with the same signal is what
   # makes the script die of it, and gives the caller the 128+n status that says
@@ -468,7 +468,7 @@ main() {
   # 30 s end to end, matching MANIFEST_TIMEOUT_MS in the monorepo's updater:
   # this is a JSON document of a few hundred bytes, so 30 s is many times what
   # it needs on any link a developer can work on, and it bounds a server that
-  # dribbles a byte at a time — which no inactivity default catches, because
+  # dribbles a byte at a time -- which no inactivity default catches, because
   # such a connection is never idle. 1 MiB is ~500x the real manifest and still
   # small enough that the parser below stays instant.
   #
@@ -484,7 +484,7 @@ Check your network connection, and that TWINFORGE_CHANNEL=$CHANNEL names a real 
   MANIFEST_FIELDS="$WORK_DIR/fields.tsv"
   if ! manifest_scan "$MANIFEST_FILE" "$PLATFORM_TAG" > "$MANIFEST_FIELDS"; then
     fail "Could not read the channel manifest at $MANIFEST_URL: $(sed -n 's/^error	//p' "$MANIFEST_FIELDS" | head -1).
-It is not the JSON document this installer expects. Report it — a manifest this
+It is not the JSON document this installer expects. Report it -- a manifest this
 installer cannot read is a publishing bug, not something to work around."
   fi
 
@@ -494,7 +494,7 @@ installer cannot read is a publishing bug, not something to work around."
 
   # $VERSION becomes a directory name under $APP_DIR/versions and is
   # interpolated into the `rm -rf` below. It is remote input, so it is checked
-  # before it is used as a path — "." and ".." pass the character class but
+  # before it is used as a path -- "." and ".." pass the character class but
   # would aim that delete at the versions directory or the install root itself.
   case "$VERSION" in
     . | ..) fail "Manifest at $MANIFEST_URL declares an unusable version \"$VERSION\". The version is used as a directory name; \".\" and \"..\" are not names. Refusing to continue." ;;
@@ -516,7 +516,7 @@ installer cannot read is a publishing bug, not something to work around."
   # here meant the two installers disagreed about the manifest's contract. A
   # hash computed on a Windows runner would have kept every Windows install
   # working and aborted every macOS and Linux one with "corrupted or tampered
-  # with" — release engineering chasing a supply-chain incident that never
+  # with" -- release engineering chasing a supply-chain incident that never
   # happened. Nothing validated the field's shape either, so a truncated or
   # empty-ish hash reached the comparison as a plausible-looking mismatch.
   case "$ARTIFACT_SHA256" in
@@ -538,7 +538,7 @@ installer cannot read is a publishing bug, not something to work around."
   # --- Idempotent short-circuit ----------------------------------------------
   # Also requires the launcher to still be there: bin/ is shared across every
   # version (not per-version, unlike the marker above), so it can go missing
-  # after a fully successful install too — the marker alone can't see that.
+  # after a fully successful install too -- the marker alone can't see that.
 
   if [ -f "$INSTALLED_MARKER" ] && [ -x "$APP_DIR/bin/twinforge" ]; then
     say "TwinForge $VERSION is already installed."
@@ -584,8 +584,8 @@ The download may be corrupted or tampered with. Try again, and if it keeps happe
   # who owns the extracted tree.
   tar -xzf "$TARBALL" --no-same-owner --no-same-permissions -C "$EXTRACT_DIR" || fail "Could not extract $TARBALL. The archive may be corrupted; try again."
 
-  [ -d "$EXTRACT_DIR/$VERSION" ] || fail "Downloaded archive does not contain a $VERSION directory. This looks like a packaging bug, not a network problem — please report it."
-  [ -f "$EXTRACT_DIR/bin/twinforge" ] || fail "Downloaded archive has no bin/twinforge launcher. This looks like a packaging bug, not a network problem — please report it."
+  [ -d "$EXTRACT_DIR/$VERSION" ] || fail "Downloaded archive does not contain a $VERSION directory. This looks like a packaging bug, not a network problem -- please report it."
+  [ -f "$EXTRACT_DIR/bin/twinforge" ] || fail "Downloaded archive has no bin/twinforge launcher. This looks like a packaging bug, not a network problem -- please report it."
 
   mkdir -p "$VERSIONS_DIR" \
     || fail "Could not create $VERSIONS_DIR." \
@@ -599,7 +599,7 @@ The download may be corrupted or tampered with. Try again, and if it keeps happe
 
   # The payload is committed first, then bin/, then the marker that says both
   # are there. bin/ is shared across every installed version, so writing it
-  # first replaces the launcher of the install that currently works — and the
+  # first replaces the launcher of the install that currently works -- and the
   # move that follows is the step most likely to fail, because $EXTRACT_DIR is
   # under $TMPDIR and $VERSION_DIR under $HOME, usually different filesystems,
   # which makes it a multi-hundred-MiB copy rather than a rename. Losing it
@@ -612,8 +612,8 @@ The download may be corrupted or tampered with. Try again, and if it keeps happe
   mkdir -p "$APP_DIR/bin" \
     || fail "Could not create $APP_DIR/bin." \
       "Check that $APP_DIR is writable, then re-run this script."
-  # Only the launcher, not `cp -R bin/.`. bin/ holds exactly one file —
-  # packaging/build-release-tarball.mjs writes bin/twinforge and nothing else —
+  # Only the launcher, not `cp -R bin/.`. bin/ holds exactly one file --
+  # packaging/build-release-tarball.mjs writes bin/twinforge and nothing else --
   # so copying the directory wholesale gained nothing and accepted whatever a
   # future archive happened to contain into a directory that is on the PATH of
   # every shell. Naming the one file also means an upgrade or downgrade cannot
@@ -621,8 +621,8 @@ The download may be corrupted or tampered with. Try again, and if it keeps happe
   cp "$EXTRACT_DIR/bin/twinforge" "$APP_DIR/bin/twinforge" \
     || fail "Could not install the launcher into $APP_DIR/bin/twinforge." \
       "Check who owns that file (an earlier run under sudo is the usual cause), then re-run this script."
-  # Not `2>/dev/null || true`. When this genuinely failed — foreign ownership
-  # from an earlier sudo run, a read-only mount, a restrictive ACL — the script
+  # Not `2>/dev/null || true`. When this genuinely failed -- foreign ownership
+  # from an earlier sudo run, a read-only mount, a restrictive ACL -- the script
   # carried on, wrote the marker, and printed "installed", and the developer got
   # `permission denied` from the first command they ran. Worse: the marker was
   # then set while the [ -x ] half of the short-circuit at the top stayed false,
@@ -644,7 +644,7 @@ The download may be corrupted or tampered with. Try again, and if it keeps happe
   print_next_steps
 }
 
-# The only statement in this file that does anything — see the header.
+# The only statement in this file that does anything -- see the header.
 #
 # Sourcing it with TWINFORGE_INSTALL_LIB=1 defines the functions and installs
 # nothing, which is how tests/ exercises the manifest parser and the URL check

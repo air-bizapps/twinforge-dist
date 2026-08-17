@@ -19,18 +19,18 @@
 # Everything below lives inside one script block, invoked once at the bottom of
 # the file. That is not a style choice. The documented entry point is
 # `irm ... | iex`, and Invoke-Expression executes the string it is given in the
-# *caller's own session* — it creates no scope of its own. Written flat, this
+# *caller's own session* -- it creates no scope of its own. Written flat, this
 # file defined Fail, Set-Current, Get-ArtifactField, Add-BinToUserPath,
 # Write-NextSteps, $Version, $Manifest, $Channel, $arch, $WorkDir and $AppDir in
 # the developer's live session, clobbering whatever they had under those names,
-# and left $ErrorActionPreference = "Stop" set there for the rest of the day —
+# and left $ErrorActionPreference = "Stop" set there for the rest of the day --
 # so the next Get-ChildItem over a folder with one unreadable subdirectory
 # terminated their pipeline instead of continuing, with nothing to connect it
 # back to an installer that had failed at the checksum an hour earlier.
 #
 # `& { ... }` runs the block in a child scope: the functions and the variables
 # below (including the two preference variables) are discarded when it returns,
-# and a `throw` inside it still unwinds all the way out — which is what Fail
+# and a `throw` inside it still unwinds all the way out -- which is what Fail
 # relies on. The wrapper also means a truncated response cannot half-run this
 # file: iex parses the whole string before executing any of it, and a cut
 # anywhere inside the block is a syntax error rather than a script that stops
@@ -58,8 +58,8 @@ function Fail([string]$Message) {
 #
 # On Windows PowerShell 5.1 Invoke-WebRequest routes anything that is not http
 # or https through WebRequest.Create, which happily returns a FileWebRequest. A
-# manifest publishing file://///evil.example.com/share/a.tar.gz — or a bare UNC
-# path, which [uri] coercion turns into a file URI — makes the OS open an SMB
+# manifest publishing file://///evil.example.com/share/a.tar.gz -- or a bare UNC
+# path, which [uri] coercion turns into a file URI -- makes the OS open an SMB
 # connection to the attacker's host and negotiate NTLM with the developer's
 # credentials. That happens before a single byte is hashed. ftp:// is live on
 # 5.1 for the same reason.
@@ -81,7 +81,7 @@ function Assert-HttpsUrl([string]$Url, [string]$ManifestUrl, [string]$VersionLab
     if ($Url -match '[^\x21-\x7E]') {
         Fail "Manifest at $ManifestUrl points $VersionLabel at a URL containing whitespace or control characters. Refusing to continue."
     }
-    # [uri] on a string that is not a URL does not throw — it builds a
+    # [uri] on a string that is not a URL does not throw -- it builds a
     # *relative* URI, whose .Scheme property then throws instead. Hence the
     # IsAbsoluteUri test before the scheme is ever read.
     $parsed = $null
@@ -93,12 +93,12 @@ function Assert-HttpsUrl([string]$Url, [string]$ManifestUrl, [string]$VersionLab
 
 # The manifest URL is built from TWINFORGE_DIST_BASE_URL, which is a documented
 # local-testing override set by the person running the script, not a value the
-# manifest gets to choose — so it is not forced to https, exactly as install.sh
+# manifest gets to choose, so it is not forced to https, exactly as install.sh
 # leaves it unforced. It *is* held to http or https, which install.sh has no
 # need to do: curl only ever downloads with the scheme it is given, while
 # Invoke-WebRequest on 5.1 turns file:// and a UNC path into an SMB round trip
 # that leaks credentials. Anything a local test wants (http://localhost:8080,
-# https://…) still works.
+# https://...) still works.
 function Assert-ManifestUrl([string]$Url) {
     if ($Url -match '[^\x21-\x7E]') {
         Fail "The channel manifest URL contains whitespace or control characters. Check TWINFORGE_DIST_BASE_URL. Refusing to continue."
@@ -131,7 +131,7 @@ if ($arch -ne [System.Runtime.InteropServices.Architecture]::X64) {
 $PlatformTag = "win-x64"
 
 # tar is probed here, beside the architecture check, rather than discovered at
-# the extraction step — which is after a few hundred MiB have been downloaded
+# the extraction step -- which is after a few hundred MiB have been downloaded
 # and verified. `& tar` with no tar on PATH raises CommandNotFoundException,
 # and the block that wraps the extraction has only a `finally`, so the
 # developer got a bare PowerShell stack trace at the end of a long download
@@ -163,8 +163,8 @@ $AppDir = Join-Path $HomeDir "app"
 # whatever ServicePointManager was left defaulted to, and TLS 1.2 is not always
 # in it. Reaching the default host at all then fails with a bare
 # "underlying connection was closed". It does not bite the documented
-# `irm ... | iex` entry point — irm has already negotiated by the time this
-# runs — but it does bite the file saved and run later, which is how it will be
+# `irm ... | iex` entry point -- irm has already negotiated by the time this
+# runs -- but it does bite the file saved and run later, which is how it will be
 # used on locked-down images.
 #
 # Not restored afterwards, unlike $ProgressPreference: this is a process-wide
@@ -173,7 +173,7 @@ $AppDir = Join-Path $HomeDir "app"
 #
 # Windows PowerShell only. On PowerShell 7 this property is a .NET Framework
 # leftover that the HttpClient stack behind Invoke-WebRequest does not consult,
-# and its default there is SystemDefault (0) — so writing Tls12 into it would,
+# and its default there is SystemDefault (0), so writing Tls12 into it would,
 # if anything ever did read it, *narrow* a runtime that already negotiates TLS
 # 1.3. Not touching it is the conservative answer for the runtime that does not
 # need it.
@@ -205,7 +205,7 @@ function Get-ArtifactField($Manifest, [string]$Field) {
 # PowerShell's comparison operators become *filters* when the left operand is a
 # collection: with "version": ["a","b"], `$Version -notmatch '...'` returns the
 # elements that fail the pattern rather than $true or $false, and an empty array
-# is falsy — so the version guard passed without validating anything, and
+# is falsy, so the version guard passed without validating anything, and
 # `-eq "."` did the same. Downstream, Join-Path with an array right operand
 # produces an *array of paths*, Test-Path over it emits one boolean per path,
 # and a two-element array is truthy in `if` whatever the booleans are. On a
@@ -229,8 +229,8 @@ function Get-ManifestString($Value, [string]$Field, [string]$ManifestUrl) {
 function Set-Current([string]$Target) {
     $currentLink = Join-Path $AppDir "current"
     # Get-Item -Force rather than Test-Path. Test-Path resolves the link, so a
-    # *dangling* junction — the state a version directory removed by hand leaves
-    # behind — reads as absent: the delete was skipped and New-Item then failed
+    # *dangling* junction -- the state a version directory removed by hand leaves
+    # behind -- reads as absent: the delete was skipped and New-Item then failed
     # with "already exists", wedging every re-run. And a `current` that is a real
     # directory rather than a junction made .Delete() throw a raw exception right
     # after the line saying the install was fine. install.sh's point_current
@@ -267,8 +267,8 @@ function Set-Current([string]$Target) {
 
 # Belt and braces behind the staging decision below: both ends are under $AppDir
 # now, so an ordinary install never reaches the fallback. It exists because
-# $AppDir\versions can itself be a junction onto another volume — people do
-# relocate directories that grow to a few hundred MiB each — and there the
+# $AppDir\versions can itself be a junction onto another volume -- people do
+# relocate directories that grow to a few hundred MiB each -- and there the
 # rename is a cross-volume move again.
 #
 # The fallback runs only after Move-Item has already failed, so it cannot make
@@ -276,8 +276,8 @@ function Set-Current([string]$Target) {
 # gets reported, because that is the one that describes the real problem.
 #
 # UNVERIFIED: the exception type and message the provider raises for a
-# cross-volume directory move. Nothing here matches on either — any move
-# failure is retried as a copy — precisely because that shape could not be
+# cross-volume directory move. Nothing here matches on either -- any move
+# failure is retried as a copy -- precisely because that shape could not be
 # checked.
 function Move-Directory([string]$From, [string]$To) {
     try {
@@ -297,7 +297,7 @@ function Move-Directory([string]$From, [string]$To) {
 # Entries are compared the way Windows resolves them, not byte for byte. The
 # old `-split ";" -contains $binDir` was an exact match, so an entry that was
 # quoted, or carried a trailing backslash, or was written with %USERPROFILE%
-# unexpanded, did not match — and every run appended another copy.
+# unexpanded, did not match -- and every run appended another copy.
 function Get-PathEntryKey([string]$Entry) {
     $entryKey = $Entry.Trim().Trim('"').Trim()
     if (-not $entryKey) { return "" }
@@ -314,18 +314,18 @@ function Get-PathEntryKey([string]$Entry) {
 # REG_SZ. That round trip did two irreversible things to every developer who
 # ran this successfully, attacker or no attacker:
 #
-#   1. Every %…% reference in their PATH was replaced by its expansion at
+#   1. Every %...% reference in their PATH was replaced by its expansion at
 #      install time. %USERPROFILE%\AppData\Local\Microsoft\WindowsApps and
 #      %JAVA_HOME%\bin became hard-coded; change JAVA_HOME afterwards and PATH
 #      no longer follows it, and a roaming profile breaks weeks later with
 #      nothing pointing back here.
-#   2. The value was left REG_SZ, so any %VAR% entry anyone added after that —
-#      by hand, or by another installer — was stored and never expanded, and
+#   2. The value was left REG_SZ, so any %VAR% entry anyone added after that --
+#      by hand, or by another installer -- was stored and never expanded, and
 #      showed up in PATH as a literal string with percent signs in it.
 #
 # So: read raw with DoNotExpandEnvironmentNames, write back with the kind the
 # value already had. When the value is absent the new one is created as REG_SZ,
-# which is exactly what the old code produced in that case — the damage was
+# which is exactly what the old code produced in that case -- the damage was
 # always to an *existing* value, and the fresh case is deliberately left
 # behaving as it did.
 #
@@ -334,7 +334,7 @@ function Get-PathEntryKey([string]$Entry) {
 #
 # No WM_SETTINGCHANGE broadcast. Doing it needs a P/Invoke declaration through
 # Add-Type, which is a compiler invocation at install time and fails outright
-# under constrained language mode — more than this is worth for an effect the
+# under constrained language mode -- more than this is worth for an effect the
 # existing "open a new terminal" guidance already covers. That guidance stays.
 #
 # UNVERIFIED: whether this API has a length ceiling of its own. The
@@ -430,11 +430,11 @@ Assert-ManifestUrl $ManifestUrl
 Write-Host "Fetching the $Channel channel manifest..."
 # Parse the document ourselves rather than letting Invoke-RestMethod decide.
 # Invoke-RestMethod only deserializes when the response carries a JSON content
-# type, and the default host here — raw.githubusercontent.com — serves .json as
+# type, and the default host here -- raw.githubusercontent.com -- serves .json as
 # `text/plain; charset=utf-8` with nosniff. Under Invoke-RestMethod the manifest
 # would come back as a plain string, every property read below would be $null,
 # and the script would abort telling the developer that our manifest is
-# malformed — blaming the publisher for a bug on this side, on the first command
+# malformed -- blaming the publisher for a bug on this side, on the first command
 # they ever run. Parsing unconditionally is correct for any content type the
 # host sends.
 #
@@ -451,7 +451,7 @@ try {
         # Five is more than any real release host needs
         # (raw.githubusercontent.com and the GitHub release CDN each use one).
         #
-        # 30 s end to end is MANIFEST_TIMEOUT_MS from the monorepo's updater —
+        # 30 s end to end is MANIFEST_TIMEOUT_MS from the monorepo's updater --
         # this is a JSON document of a few hundred bytes, so it is many times
         # what any link a developer can work on needs.
         #
@@ -490,7 +490,7 @@ try {
         # byte-order mark and defaults to UTF-8, which is what the manifest is.
         $Manifest = [System.IO.File]::ReadAllText($ManifestFile) | ConvertFrom-Json
     } catch {
-        Fail "Could not read the channel manifest from $ManifestUrl`nIt is not the JSON document this installer expects. Report it — a manifest this installer cannot read is a publishing bug, not something to work around.`n$($_.Exception.Message)"
+        Fail "Could not read the channel manifest from $ManifestUrl`nIt is not the JSON document this installer expects. Report it -- a manifest this installer cannot read is a publishing bug, not something to work around.`n$($_.Exception.Message)"
     }
 } finally {
     Remove-Item -LiteralPath $ManifestFile -Force -ErrorAction SilentlyContinue
@@ -509,7 +509,7 @@ if (-not $Version) {
 
 # $Version becomes a directory name under $AppDir\versions, and the paths built
 # from it below are created, moved and eventually deleted. It is remote input,
-# so it is checked before it is used as a path — `.` and `..` pass the character
+# so it is checked before it is used as a path -- `.` and `..` pass the character
 # class but would aim all of that at the versions directory or the install root
 # itself.
 #
@@ -518,7 +518,7 @@ if (-not $Version) {
 if (($Version -notmatch '\A[A-Za-z0-9._-]+\z') -or ($Version -eq ".") -or ($Version -eq "..")) {
     Fail "Manifest at $ManifestUrl declares an unusable version '$Version'. Expected only letters, digits, dot, underscore and hyphen (and not '.' or '..'), because the version is used as a directory name. Refusing to continue."
 }
-# The check above rejects "." and ".." by name, which leaves "..." — three dots
+# The check above rejects "." and ".." by name, which leaves "..." -- three dots
 # match the character class and are neither literal. Win32 path normalisation
 # strips trailing periods from the final component, so <AppDir>\versions\...
 # resolved to <AppDir>\versions, which made the existence check below succeed
@@ -531,7 +531,7 @@ if (($Version -match '\A\.+\z') -or $Version.EndsWith(".")) {
     Fail "Manifest at $ManifestUrl declares an unusable version '$Version'. Windows strips trailing dots from a directory name, so this one would not name the directory it appears to. Refusing to continue."
 }
 # Reserved device names are not filenames, and Test-Path against one returns
-# true in any directory — so the archive-shape checks below were satisfied by a
+# true in any directory, so the archive-shape checks below were satisfied by a
 # path that does not exist. The reservation applies to the stem, so NUL.txt is
 # reserved exactly as NUL is.
 #
@@ -564,7 +564,7 @@ $VersionDir = Join-Path $VersionsDir $Version
 # still end in exactly that name once Windows has normalised it. If it does
 # not, the name is aimed somewhere other than where it reads, and that is the
 # whole of the "..." bug regardless of which spelling produced it.
-# GetFullPath does no I/O — it is string normalisation — so this is safe to run
+# GetFullPath does no I/O -- it is string normalisation, so this is safe to run
 # against a path that does not exist yet.
 #
 # UNVERIFIED: that GetFullPath performs the trailing-period trim on both .NET
@@ -591,7 +591,7 @@ $LauncherPath = Join-Path (Join-Path $AppDir "bin") "twinforge.cmd"
 # --- Idempotent short-circuit --------------------------------------------------
 # Also requires the launcher to still be there: bin\ is shared across every
 # version (not per-version, unlike the marker above), so it can go missing
-# after a fully successful install too — the marker alone can't see that.
+# after a fully successful install too -- the marker alone can't see that.
 
 # -PathType Leaf on both: without it a *directory* named .installed satisfies
 # the marker test and a directory named twinforge.cmd satisfies the launcher
@@ -621,8 +621,8 @@ if ((Test-Path -LiteralPath $InstalledMarker -PathType Leaf) -and (Test-Path -Li
 #
 # Staging on the destination volume was chosen over adding a copy fallback,
 # because it does more than avoid the error: $VersionsDir is a child of $AppDir,
-# so the move that commits the payload becomes a rename within one directory —
-# atomic, instant, and with no half-copied tree to reason about — instead of a
+# so the move that commits the payload becomes a rename within one directory --
+# atomic, instant, and with no half-copied tree to reason about -- instead of a
 # few hundred MiB copied a second time. It is the same reason the monorepo's
 # updater stages beside its target (packaging/updater/check-for-update.mjs).
 #
@@ -652,7 +652,7 @@ try {
     Write-Host "Downloading TwinForge $Version for $PlatformTag... (a few hundred MiB; no progress is shown)"
     # Windows PowerShell 5.1 renders the Invoke-WebRequest progress bar
     # synchronously, and at this artifact's size that rendering dominates the
-    # transfer — the download looks hung. Scoped to this one call and restored
+    # transfer -- the download looks hung. Scoped to this one call and restored
     # in `finally`, not set at the top of the script: the documented entry
     # point is `irm ... | iex`, which runs in the *caller's own session*, so a
     # top-level assignment would silently disable progress bars in the
@@ -662,7 +662,7 @@ try {
     try {
         # 30 minutes is DOWNLOAD_TIMEOUT_MS from the monorepo's downloader
         # (packaging/release-fetch.mjs). The real artifact is 223 MiB, so
-        # clearing it needs 127 KiB/s sustained — well under anything a
+        # clearing it needs 127 KiB/s sustained -- well under anything a
         # developer can work on. See the manifest fetch above for what
         # -TimeoutSec is and is not known to bound on 5.1.
         Invoke-WebRequest -Uri $ArtifactUrl -OutFile $TarballPath -UseBasicParsing -MaximumRedirection 5 -TimeoutSec 1800
@@ -674,7 +674,7 @@ try {
 
     # 512 MiB is DOWNLOAD_MAX_BYTES from the same file, over twice the largest
     # artifact this project ships. Invoke-WebRequest has no size limit to pass,
-    # so this cannot stop a server writing the bytes — it stops them being
+    # so this cannot stop a server writing the bytes -- it stops them being
     # hashed, extracted and trusted, and it says why instead of failing later
     # with something less specific.
     $TarballLength = (Get-Item -LiteralPath $TarballPath).Length
@@ -709,22 +709,22 @@ try {
 
     $ExtractedVersionDir = Join-Path $ExtractDir $Version
     if (-not (Test-Path -LiteralPath $ExtractedVersionDir -PathType Container)) {
-        Fail "Downloaded archive does not contain a $Version directory. This looks like a packaging bug, not a network problem — please report it."
+        Fail "Downloaded archive does not contain a $Version directory. This looks like a packaging bug, not a network problem -- please report it."
     }
     # The launcher by name, not the directory. An archive whose bin\ existed but
     # was empty passed the old check, so the marker was written and PATH updated
-    # while the launcher never appeared — and the short-circuit at the top then
+    # while the launcher never appeared -- and the short-circuit at the top then
     # failed forever, re-downloading a few hundred MiB on every run without ever
     # saying why.
     $ExtractedLauncher = Join-Path (Join-Path $ExtractDir "bin") "twinforge.cmd"
     if (-not (Test-Path -LiteralPath $ExtractedLauncher -PathType Leaf)) {
-        Fail "Downloaded archive has no bin\twinforge.cmd launcher. This looks like a packaging bug, not a network problem — please report it."
+        Fail "Downloaded archive has no bin\twinforge.cmd launcher. This looks like a packaging bug, not a network problem -- please report it."
     }
 
     # --- Commit ----------------------------------------------------------------
     # The old sequence deleted $VersionDir and only then moved the new tree in.
-    # Anything at all in between — the cross-volume failure above, a lock on a
-    # file under it, a full disk, Ctrl-C — left the developer with no copy of
+    # Anything at all in between -- the cross-volume failure above, a lock on a
+    # file under it, a full disk, Ctrl-C -- left the developer with no copy of
     # that version, `current` dangling, and no marker to record that a
     # half-install had happened. Recovery needed a successful network round
     # trip, from a machine that had just failed one.
@@ -752,8 +752,8 @@ try {
 
     # A previous run may have been interrupted after $VersionDir was created but
     # before the marker was written, and a move onto an existing directory would
-    # merge into it rather than replace it. Whatever is there — a complete
-    # install or that debris — goes aside rather than being deleted, and is only
+    # merge into it rather than replace it. Whatever is there -- a complete
+    # install or that debris -- goes aside rather than being deleted, and is only
     # reclaimed in the `finally` once the new tree is in place.
     if (Test-Path -LiteralPath $VersionDir) {
         try {
@@ -782,7 +782,7 @@ try {
 
     # bin\ after the payload, never before. bin\ is shared across every
     # installed version, so writing it first replaces the launcher of the
-    # install that currently works — and then the move above is the step most
+    # install that currently works -- and then the move above is the step most
     # likely to fail. The comment that used to sit here claimed this ordering
     # while the code did the opposite; install.sh had the same wrong comment and
     # the same inversion, and both now match what they say.
@@ -796,7 +796,7 @@ try {
     #
     # And it is replaced through a sibling, not written over in place. Upgrading
     # while a TwinForge was running used to fail partway through `Copy-Item
-    # -Force`, having already written some of bin\ — shared across versions, so
+    # -Force`, having already written some of bin\ -- shared across versions, so
     # the damage outlived the failed install, and the marker was never written.
     # cmd.exe re-reads a running .cmd from disk by byte offset, so overwriting
     # it in place is precisely what corrupts a running instance. File.Replace is
@@ -821,7 +821,7 @@ try {
             [System.IO.File]::Move($LauncherStagePath, $LauncherPath)
         }
     } catch {
-        Fail "TwinForge $Version is unpacked at $VersionDir, but the launcher at $LauncherPath could not be replaced.`nThe launcher that was there is untouched. A TwinForge still running is the usual cause — close it and re-run this script.`n$($_.Exception.Message)"
+        Fail "TwinForge $Version is unpacked at $VersionDir, but the launcher at $LauncherPath could not be replaced.`nThe launcher that was there is untouched. A TwinForge still running is the usual cause -- close it and re-run this script.`n$($_.Exception.Message)"
     }
     try {
         New-Item -ItemType File -Path $InstalledMarker -Force | Out-Null
@@ -834,7 +834,7 @@ try {
     Remove-Item -LiteralPath $IncomingDir -Recurse -Force -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath $LauncherStagePath -Force -ErrorAction SilentlyContinue
     # $true means $VersionDir holds nothing usable and this directory holds what
-    # it should. Nothing may delete it in that state — it is not a leftover
+    # it should. Nothing may delete it in that state -- it is not a leftover
     # then, it is the version, and the message above tells the developer where
     # to find it. Otherwise it is the superseded copy, and reclaiming it is
     # best-effort: the install has already succeeded by the time this runs.
