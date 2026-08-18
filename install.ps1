@@ -3,7 +3,7 @@
 #   irm https://raw.githubusercontent.com/air-bizapps/twinforge-dist/main/install.ps1 | iex
 #
 # Installs into $env:USERPROFILE\.twinforge\app and prints the next step
-# (enrollment) when done. Safe to re-run: if the channel's version is already
+# when done. Safe to re-run: if the channel's version is already
 # installed, it just repoints `current` and exits.
 #
 # Env overrides:
@@ -678,14 +678,22 @@ function Add-BinToUserPath {
     }
 }
 
+# Say what the next command actually is. This used to point at `twinforge enroll`
+# and claim the install would not start until enrolled, and both halves were
+# wrong: no `enroll` subcommand exists anywhere in the product, and the launcher
+# only intercepts update/rollback/unpin/status -- everything else falls through
+# to the server. So a developer who followed this got a running server and no
+# message about it, from a command they believed was enrolling their machine.
 function Write-NextSteps {
     Write-Host ""
     Write-Host "TwinForge $Version is installed at $AppDir."
     Write-Host ""
-    Write-Host "It will not start until this machine is enrolled with your organization's"
-    Write-Host "instance. Next step:"
+    Write-Host "Start it with:"
     Write-Host ""
-    Write-Host "  twinforge enroll"
+    Write-Host "  twinforge"
+    Write-Host ""
+    Write-Host "Enrolling this machine with an organization's instance does not exist yet."
+    Write-Host "Until it does, this runs as a local instance on your own machine."
     Write-Host ""
     Write-Host "(Open a new terminal first if this was your first install, so $AppDir\bin is on your PATH.)"
 }
