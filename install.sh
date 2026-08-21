@@ -3,8 +3,8 @@
 #
 #   curl -fsSL https://raw.githubusercontent.com/air-bizapps/twinforge-dist/main/install.sh | sh
 #
-# Installs into ~/.twinforge/app and prints how to start it when done.
-# Safe to re-run: if the channel's version is already installed, it
+# Installs into ~/.twinforge/app and prints the next step (enrollment) when
+# done. Safe to re-run: if the channel's version is already installed, it
 # just repoints `current` and exits.
 #
 # Env overrides:
@@ -630,24 +630,15 @@ add_bin_to_path() {
   fi
 }
 
-# Say what the next command actually is. This used to point at `twinforge enroll`
-# and claim the install would not start until enrolled, and both halves were
-# wrong: no `enroll` subcommand exists anywhere in the product, and the launcher
-# only intercepts update/rollback/unpin/status -- everything else falls through
-# to `exec node server/dist/index.js`. So a developer who followed this got a
-# running server, 192 database migrations and no message about either, from a
-# command they believed was enrolling their machine.
 print_next_steps() {
   cat <<EOF
 
 TwinForge $VERSION is installed at $APP_DIR.
 
-Start it with:
+It will not start until this machine is enrolled with your organization's
+instance. Next step:
 
-  twinforge
-
-Enrolling this machine with an organization's instance does not exist yet.
-Until it does, this runs as a local instance on your own machine.
+  twinforge enroll
 
 (Open a new shell first if this was your first install, so $APP_DIR/bin is on your PATH.)
 EOF
