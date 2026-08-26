@@ -630,15 +630,37 @@ add_bin_to_path() {
   fi
 }
 
+# Say what the next command actually is, and say it truthfully. This text has
+# been wrong twice, in opposite directions, and both times because it described
+# an intention rather than the code:
+#
+#   1. It pointed at `twinforge enroll` before that subcommand existed, so the
+#      word fell through the launcher's `case` and booted the server -- 192
+#      database migrations from a command the reader believed was enrolling.
+#   2. It then claimed the install "will not start until this machine is
+#      enrolled". Also false: `evaluateBoot` answers
+#      `{ allow: true, reason: "not enrolled; running standalone" }` for an
+#      unbound machine, on purpose. Enrollment gates a machine that HAS a
+#      binding; it has never gated a machine that has none.
+#
+# The cost of (2) is quieter than (1) and therefore worse: the reader either
+# does not try, or tries "just to check" and gets the same surprise migrations
+# that (1) caused. So this now states the two facts separately -- it runs, and
+# enrolling is what links it to an organization -- and shows `enroll` with the
+# argument it actually requires (without `--instance` it exits 2 with usage).
 print_next_steps() {
   cat <<EOF
 
 TwinForge $VERSION is installed at $APP_DIR.
 
-It will not start until this machine is enrolled with your organization's
-instance. Next step:
+Start it with:
 
-  twinforge enroll
+  twinforge
+
+It runs as a local instance on this machine. To link it to your organization's
+instance instead:
+
+  twinforge enroll --instance https://twinforge.your-org.com
 
 (Open a new shell first if this was your first install, so $APP_DIR/bin is on your PATH.)
 EOF
