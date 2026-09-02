@@ -103,6 +103,20 @@ jobs:
         shell: powershell
         run: ./tests/parse-install-ps1.ps1
 
+      # Platform detection, which the parser and the linter both passed while it
+      # was telling a healthy x64 machine it was unsupported. The 5.1 run is
+      # again the one that matters: the bug was a missing static property
+      # answering $null in silence, which is 5.1 behaviour, reached through a
+      # type literal that binds against whatever the caller's session has
+      # loaded -- and `irm ... | iex` is documented, so that session is ordinary
+      # usage rather than an edge case.
+      - name: Verify platform detection under PowerShell 7
+        shell: pwsh
+        run: ./tests/platform-detection-test.ps1
+      - name: Verify platform detection under Windows PowerShell 5.1
+        shell: powershell
+        run: ./tests/platform-detection-test.ps1
+
       # The two steps below are the only part of install.ps1 that anyone or
       # anything has ever executed. Everything else about that file is checked by
       # a parser and by a linter, neither of which says whether it works.
