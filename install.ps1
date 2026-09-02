@@ -180,8 +180,14 @@ $BaseUrl = if ($env:TWINFORGE_DIST_BASE_URL) { $env:TWINFORGE_DIST_BASE_URL } el
 # 5.1 therefore throws at the call, and `irm ... | iex` runs this text in the
 # caller's own session, where StrictMode may well be on from their profile:
 #
-#     A variável '$IsWindows' não pode ser recuperada porque ainda
-#     não foi definida.
+#     The variable '$IsWindows' cannot be retrieved because it has not
+#     been set.
+#
+# (Quoted in English; the machine it was measured on is pt-BR and said the
+# same thing in Portuguese. This file is checked for pure ASCII by CI, and
+# for the reason this whole section is about: 5.1 reads a BOM-less file as
+# the ANSI code page rather than UTF-8, so an accented byte here can be
+# misdecoded and break the parse.)
 #
 # That is a supported machine refused by its own platform check, out of the
 # caller's session state -- the same species of failure as the shadowed type

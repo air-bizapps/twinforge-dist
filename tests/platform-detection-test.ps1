@@ -171,7 +171,7 @@ Assert-True  "a host too old to report PSEdition is still Windows" (Test-Windows
 # decides. A first version of this function had the bare variable and refused a
 # healthy Windows machine with:
 #
-#     A variável '$IsWindows' não pode ser recuperada porque ainda não foi definida.
+#     The variable '$IsWindows' cannot be retrieved because it has not been set.
 #
 # StrictMode is set in a child scope so it does not leak into the rest of this
 # file; it is dynamically scoped, so the call below still runs under it. Verified
