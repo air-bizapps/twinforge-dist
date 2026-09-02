@@ -162,12 +162,25 @@ $BaseUrl = if ($env:TWINFORGE_DIST_BASE_URL) { $env:TWINFORGE_DIST_BASE_URL } el
 # PowerShell's own automatic state. install.sh has never been exposed to this
 # because it asks `uname -m`, an external program.
 
-# PSEdition is "Desktop" only on Windows PowerShell, which ships nowhere but
-# Windows; $IsWindows is the automatic variable PowerShell 6+ defines and 5.1
-# does not, so the -or short-circuits before it is ever read there.
-function Test-WindowsHost {
-    if ($PSVersionTable.PSEdition -eq "Desktop") { return $true }
-    return [bool]$IsWindows
+# Tested against "Core" rather than for "Desktop", and the difference is not
+# cosmetic. PSEdition itself only arrived in PowerShell 5.1, so on 5.0 and
+# earlier the property is absent and reads as nothing -- and a test for
+# "Desktop" turns that into "not Windows", which would have this installer tell
+# somebody sitting at a Windows machine to go and run install.sh on macOS. That
+# is the same species of lie as the one this section exists to fix, so it is
+# worth the inversion: "Core" is PowerShell 6+, and everything else, including
+# nothing at all, is Windows PowerShell, which ships on no other OS.
+#
+# $IsWindows is the automatic variable PowerShell 6+ defines and Windows
+# PowerShell does not; the first branch returns before it is ever read there.
+#
+# The two values arrive as parameters, defaulted from the session, only so the
+# four combinations can be tested: $PSVersionTable is read-only, so a test
+# cannot put a different edition in front of this function from the outside.
+# Nothing calls it with arguments.
+function Test-WindowsHost([string]$Edition = $PSVersionTable.PSEdition, $WindowsFlag = $IsWindows) {
+    if ($Edition -ne "Core") { return $true }
+    return [bool]$WindowsFlag
 }
 
 # PROCESSOR_ARCHITEW6432 is consulted first because it is set only inside a

@@ -145,6 +145,23 @@ try {
 Assert-Equal "this runner is detected as win-x64" "x64" (Get-HostArchitecture)
 Assert-True "this runner is detected as Windows" (Test-WindowsHost)
 
+# --- Which host counts as Windows ----------------------------------------------
+# Driven through Test-WindowsHost's parameters because $PSVersionTable is
+# read-only: an earlier attempt to fake an edition by assigning to it failed
+# silently on the rebind and then *mutated the real table* through
+# $PSVersionTable.PSEdition = ..., which quietly poisoned every case after it.
+# The parameters exist so that cannot happen again.
+#
+# The last row is the one with teeth. PSEdition arrived in PowerShell 5.1, so on
+# 5.0 and earlier it is absent, and a first version of this function tested for
+# "Desktop" and therefore answered "not Windows" on a Windows machine -- the
+# same lie as the bug at the top of this file, wearing a different hat.
+
+Assert-True  "Windows PowerShell 5.1 is a Windows host" (Test-WindowsHost "Desktop" $null)
+Assert-True  "PowerShell 7 on Windows is a Windows host" (Test-WindowsHost "Core" $true)
+Assert-True  "PowerShell 7 on Linux or macOS is not" (-not (Test-WindowsHost "Core" $false))
+Assert-True  "a host too old to report PSEdition is still Windows" (Test-WindowsHost "" $null)
+
 # --- The two refusals are different sentences -----------------------------------
 # "I could not determine your architecture" and "your architecture is not built
 # yet" are different facts and send the reader to different places. The bug this
