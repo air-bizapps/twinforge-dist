@@ -172,13 +172,30 @@ $BaseUrl = if ($env:TWINFORGE_DIST_BASE_URL) { $env:TWINFORGE_DIST_BASE_URL } el
 # nothing at all, is Windows PowerShell, which ships on no other OS.
 #
 # $IsWindows is the automatic variable PowerShell 6+ defines and Windows
-# PowerShell does not; the first branch returns before it is ever read there.
+# PowerShell does not, so on 5.1 it has to be read as something that may not be
+# there. It is fetched through Get-Variable rather than written `$IsWindows`
+# because a default parameter value is evaluated when the parameter is bound,
+# which is *before* the body runs -- returning early in the first branch does
+# not save it. Under `Set-StrictMode -Version Latest` a bare `$IsWindows` on
+# 5.1 therefore throws at the call, and `irm ... | iex` runs this text in the
+# caller's own session, where StrictMode may well be on from their profile:
+#
+#     A variável '$IsWindows' não pode ser recuperada porque ainda
+#     não foi definida.
+#
+# That is a supported machine refused by its own platform check, out of the
+# caller's session state -- the same species of failure as the shadowed type
+# this section exists to fix, so it gets the same treatment: read the fact from
+# somewhere that cannot be absent. Get-Variable -ErrorAction SilentlyContinue
+# answers $null for an undefined variable under StrictMode without throwing.
 #
 # The two values arrive as parameters, defaulted from the session, only so the
 # four combinations can be tested: $PSVersionTable is read-only, so a test
 # cannot put a different edition in front of this function from the outside.
 # Nothing calls it with arguments.
-function Test-WindowsHost([string]$Edition = $PSVersionTable.PSEdition, $WindowsFlag = $IsWindows) {
+function Test-WindowsHost(
+    [string]$Edition = $PSVersionTable.PSEdition,
+    $WindowsFlag = (Get-Variable -Name IsWindows -ValueOnly -ErrorAction SilentlyContinue)) {
     if ($Edition -ne "Core") { return $true }
     return [bool]$WindowsFlag
 }

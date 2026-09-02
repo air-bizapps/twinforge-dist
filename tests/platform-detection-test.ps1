@@ -162,6 +162,35 @@ Assert-True  "PowerShell 7 on Windows is a Windows host" (Test-WindowsHost "Core
 Assert-True  "PowerShell 7 on Linux or macOS is not" (-not (Test-WindowsHost "Core" $false))
 Assert-True  "a host too old to report PSEdition is still Windows" (Test-WindowsHost "" $null)
 
+# --- ...and survives the caller having StrictMode on ----------------------------
+# Called with no arguments, so the defaults are bound -- which is the whole
+# point. A default parameter value is evaluated at binding time, before the body
+# runs, so `$WindowsFlag = $IsWindows` is read on 5.1 even though the first
+# branch would have returned without it. Under StrictMode that read throws, and
+# `irm ... | iex` runs install.ps1 in the caller's own session, so their profile
+# decides. A first version of this function had the bare variable and refused a
+# healthy Windows machine with:
+#
+#     A variável '$IsWindows' não pode ser recuperada porque ainda não foi definida.
+#
+# StrictMode is set in a child scope so it does not leak into the rest of this
+# file; it is dynamically scoped, so the call below still runs under it. Verified
+# to go red against the bare-variable version -- without that, this shape would
+# be a test that passes because it never reaches the hazard.
+#
+# Neither Assert-Equal nor Assert-True is used here, and that is not fussiness.
+# Both compare through a boolean coercion -- `$true -eq "threw: ..."` is $true,
+# because a non-empty string casts to $true -- so handing either of them the
+# caught message produces a pass. The first version of this test did exactly
+# that and reported "ok" against the bare-variable install.ps1.
+$strictError = $null
+$strictOk = & {
+    Set-StrictMode -Version Latest
+    try { [bool](Test-WindowsHost) } catch { $script:strictError = $_.Exception.Message; $false }
+}
+if ($strictOk -eq $true) { Report-Pass "detection survives a caller with StrictMode on" }
+else { Report-Fail "detection survives a caller with StrictMode on" $strictError }
+
 # --- The two refusals are different sentences -----------------------------------
 # "I could not determine your architecture" and "your architecture is not built
 # yet" are different facts and send the reader to different places. The bug this
