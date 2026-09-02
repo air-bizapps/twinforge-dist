@@ -128,17 +128,82 @@ $BaseUrl = if ($env:TWINFORGE_DIST_BASE_URL) { $env:TWINFORGE_DIST_BASE_URL } el
 
 # --- Platform detection -------------------------------------------------------
 # v1 supports win-x64 only (see docs/superpowers/specs/2026-08-15-distribuicao-e-update-design.md, E3).
+#
+# Neither check below may go through
+# [System.Runtime.InteropServices.RuntimeInformation], and that is the whole
+# point of this section. A type literal is resolved against the assemblies
+# loaded in the *caller's own session*, and the documented way to run this file
+# -- `irm ... | iex` -- is exactly the case where that session is somebody
+# else's. PSReadLine 2.0.0 ships an internal type of precisely that name
+# carrying only IsOSPlatform and OSDescription, and Windows PowerShell loads
+# PSReadLine into every interactive session, so on such a machine the literal
+# binds to the shim and ::OSArchitecture is a member that is not there.
+#
+# Windows PowerShell 5.1 answers a missing *static property* with $null and no
+# error at all -- not a terminating one, not a warning, nothing -- even under
+# $ErrorActionPreference = "Stop". Confirmed on 5.1.26100.8875:
+#
+#     [System.Math]::NoSuchThing   ->   $null
+#
+# So $arch came out $null, "$null" interpolates to nothing, and
+# `$null -ne [Architecture]::X64` is true. Reported from a healthy x64 Windows
+# 11 machine, the installer printed:
+#
+#     Unsupported platform: windows/
+#     Supported platforms: win-x64. Other Windows architectures are not built yet.
+#
+# It told someone their supported machine was unsupported and sent them looking
+# for a CPU they do not have. Note the shape of the failure: the OS check one
+# line above *passed*, because the shim does carry IsOSPlatform. A half-present
+# type is worse than an absent one -- an absent one throws.
+#
+# Both facts therefore come from places no loaded assembly can redefine: the
+# PROCESSOR_ARCHITECTURE pair the OS itself puts in the environment, and
+# PowerShell's own automatic state. install.sh has never been exposed to this
+# because it asks `uname -m`, an external program.
 
-# The OS was never checked, only the architecture. Under pwsh on Linux or macOS
-# the x64 check passes, %USERPROFILE% is $null, and the script proceeds to
-# install into a path built from nothing. RuntimeInformation is already the type
-# the architecture check uses, so this adds no dependency.
-if (-not [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::Windows)) {
+# PSEdition is "Desktop" only on Windows PowerShell, which ships nowhere but
+# Windows; $IsWindows is the automatic variable PowerShell 6+ defines and 5.1
+# does not, so the -or short-circuits before it is ever read there.
+function Test-WindowsHost {
+    if ($PSVersionTable.PSEdition -eq "Desktop") { return $true }
+    return [bool]$IsWindows
+}
+
+# PROCESSOR_ARCHITEW6432 is consulted first because it is set only inside a
+# 32-bit process on a 64-bit OS (WOW64). There PROCESSOR_ARCHITECTURE describes
+# the *process* ("x86") while this one describes the machine ("AMD64"), and
+# being launched from the 32-bit powershell.exe in SysWOW64 is an ordinary
+# thing that would otherwise be reported as an unsupported 32-bit machine.
+#
+# Returns $null when neither variable is set, which the caller must distinguish
+# from a known-but-unsupported architecture: they are different failures and
+# they need different sentences.
+function Get-HostArchitecture {
+    $raw = if ($env:PROCESSOR_ARCHITEW6432) { $env:PROCESSOR_ARCHITEW6432 } else { $env:PROCESSOR_ARCHITECTURE }
+    if (-not $raw) { return $null }
+    $raw = $raw.Trim()
+    if (-not $raw) { return $null }
+    # Lower-cased tags, matching the ones install.sh builds out of uname, so the
+    # two installers name the same machine the same way.
+    switch ($raw) {
+        "AMD64" { return "x64" }
+        "X86"   { return "x86" }
+        "ARM64" { return "arm64" }
+        "IA64"  { return "ia64" }
+        default { return $raw.ToLowerInvariant() }
+    }
+}
+
+if (-not (Test-WindowsHost)) {
     Fail "This installer is for Windows.`nOn macOS and Linux, run install.sh instead:`n  curl -fsSL https://raw.githubusercontent.com/air-bizapps/twinforge-dist/main/install.sh | sh"
 }
 
-$arch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture
-if ($arch -ne [System.Runtime.InteropServices.Architecture]::X64) {
+$arch = Get-HostArchitecture
+if (-not $arch) {
+    Fail "Could not determine this machine's CPU architecture: neither PROCESSOR_ARCHITEW6432 nor PROCESSOR_ARCHITECTURE is set in this environment.`nThat is not a statement about whether your machine is supported -- the installer could not find out, so it is stopping rather than guessing. Check those variables, or install from the release tarball by hand."
+}
+if ($arch -ne "x64") {
     Fail "Unsupported platform: windows/$arch`nSupported platforms: win-x64. Other Windows architectures are not built yet."
 }
 $PlatformTag = "win-x64"
