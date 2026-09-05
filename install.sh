@@ -648,6 +648,14 @@ add_bin_to_path() {
 # that (1) caused. So this now states the two facts separately -- it runs, and
 # enrolling is what links it to an organization -- and shows `enroll` with the
 # argument it actually requires (without `--instance` it exits 2 with usage).
+#
+#   3. Then, after hydration became its own explicit step (`--pull`, or
+#      `twinforge pull` on its own), this kept showing bare `enroll
+#      --instance` -- correct syntax, incomplete instruction. Enrolling
+#      alone links the machine but brings down no data; the reader who
+#      follows this text to the letter opens an empty board and concludes
+#      the install is broken. Same shape as (1) and (2): the text described
+#      what enrolling used to imply, not what it does now.
 print_next_steps() {
   cat <<EOF
 
@@ -660,7 +668,11 @@ Start it with:
 It runs as a local instance on this machine. To link it to your organization's
 instance instead:
 
-  twinforge enroll --instance https://twinforge.your-org.com
+  twinforge enroll --instance https://twinforge.your-org.com --pull
+
+Enrolling on its own only authorizes the link -- it brings down no data. The
+board starts empty on purpose until you also hydrate; \`--pull\` does both in
+one step. (Already enrolled? \`twinforge pull\` hydrates on its own.)
 
 (Open a new shell first if this was your first install, so $APP_DIR/bin is on your PATH.)
 EOF

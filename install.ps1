@@ -790,7 +790,11 @@ function Write-NextSteps {
     Write-Host "It runs as a local instance on this machine. To link it to your organization's"
     Write-Host "instance instead:"
     Write-Host ""
-    Write-Host "  twinforge enroll --instance https://twinforge.your-org.com"
+    Write-Host "  twinforge enroll --instance https://twinforge.your-org.com --pull"
+    Write-Host ""
+    Write-Host "Enrolling on its own only authorizes the link -- it brings down no data. The"
+    Write-Host "board starts empty on purpose until you also hydrate; ``--pull`` does both in"
+    Write-Host "one step. (Already enrolled? ``twinforge pull`` hydrates on its own.)"
     Write-Host ""
     Write-Host "(Open a new terminal first if this was your first install, so $AppDir\bin is on your PATH.)"
 }
