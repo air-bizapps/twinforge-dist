@@ -752,10 +752,10 @@ main() {
   PLATFORM_TAG="$os_tag-$arch_tag"
 
   case "$PLATFORM_TAG" in
-    darwin-arm64 | linux-x64) ;;
+    darwin-arm64 | darwin-x64 | linux-x64) ;;
     *)
       fail "Unsupported platform: $os/$arch" \
-        "Supported platforms: darwin-arm64, linux-x64. On Windows, run install.ps1 instead."
+        "Supported platforms: darwin-arm64, darwin-x64, linux-x64. On Windows, run install.ps1 instead."
       ;;
   esac
 
