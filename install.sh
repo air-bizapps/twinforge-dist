@@ -751,11 +751,37 @@ main() {
   esac
   PLATFORM_TAG="$os_tag-$arch_tag"
 
+  # An Apple Silicon Mac that runs this script through Rosetta reports x86_64
+  # from `uname -m`: the answer describes the translated process, not the
+  # machine. That is an ordinary thing to land in -- Terminal or iTerm with
+  # "Open using Rosetta" ticked, a shell started by `arch -x86_64`, a terminal
+  # hosted inside an x86 process -- and while darwin-x64 was unsupported it
+  # produced a refusal, which at least said something was wrong. Now that both
+  # Mac builds exist it would instead install the emulated one and keep
+  # updating to it forever, with nothing ever mentioning it. That is the worse
+  # outcome, so it is checked here rather than left to uname.
+  #
+  # `hw.optional.arm64` describes the hardware and is not something translation
+  # can rewrite, so it is what decides. A sysctl that is absent or unreadable
+  # leaves arch_tag alone: an unanswered question is not an answer, and
+  # darwin-x64 is a real target now, so the fallback installs what uname
+  # actually said instead of guessing upward.
+  if [ "$os_tag" = darwin ] && [ "$arch_tag" = x64 ] &&
+      [ "$(sysctl -n hw.optional.arm64 2>/dev/null || echo 0)" = 1 ]; then
+    say "This is an Apple Silicon Mac, but the shell running this script is translated by Rosetta, so uname reports x86_64. Installing the native arm64 build."
+    arch_tag=arm64
+    PLATFORM_TAG="$os_tag-$arch_tag"
+  fi
+
+  # The refusal names the platform tag as well as the raw uname pair. It used to
+  # print only "Darwin/x86_64" while the supported list was written in tags, so
+  # the two halves of the sentence could not be compared by the person reading
+  # it.
   case "$PLATFORM_TAG" in
-    darwin-arm64 | linux-x64) ;;
+    darwin-arm64 | darwin-x64 | linux-x64) ;;
     *)
-      fail "Unsupported platform: $os/$arch" \
-        "Supported platforms: darwin-arm64, linux-x64. On Windows, run install.ps1 instead."
+      fail "Unsupported platform: $os/$arch (platform tag $PLATFORM_TAG)" \
+        "Supported platforms: darwin-arm64, darwin-x64, linux-x64. On Windows, run install.ps1 instead."
       ;;
   esac
 

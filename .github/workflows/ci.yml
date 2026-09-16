@@ -46,6 +46,12 @@ jobs:
       # /bin/sh here is dash, which is the point: these run against the shell
       # most of the audience actually invokes, not against bash.
       - run: sh tests/manifest-parse-test.sh
+      # The installers' platform gates are the one part that refuses before
+      # anything is fetched, so a mistake there is invisible to every other test
+      # in this file. install.ps1 has had platform-detection-test.ps1 since #7;
+      # this is the same thing for install.sh, with uname and sysctl replaced on
+      # PATH so a Linux runner can be asked what a Mac would have answered.
+      - run: sh tests/platform-detection-test.sh
       - run: sh tests/url-validation-test.sh
       - run: sh tests/truncation-test.sh
       # Real RSA-3072 keys, real openssl signatures, generated in the job. The
