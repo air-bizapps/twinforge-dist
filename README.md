@@ -31,6 +31,12 @@ controla o manifest quer que exista.
 No Windows o `install.ps1` não precisa de nada além do que o sistema já traz: a verificação é .NET
 puro (`RSA.ImportParameters` + `VerifyData`), sem binário externo.
 
+As plataformas com build publicada são `darwin-arm64`, `darwin-x64`, `linux-x64` e `win-x64` — Macs
+Apple Silicon e Intel, Linux x86_64 e Windows x86_64. Num Mac Apple Silicon cujo terminal roda sob
+Rosetta o `uname -m` responde `x86_64`, porque descreve o processo e não a máquina; o `install.sh`
+consulta o `hw.optional.arm64` do `sysctl`, percebe isso e instala a build arm64 nativa, dizendo que
+fez. Sem esse `sysctl` a instalação segue com o que o `uname` respondeu, em vez de adivinhar.
+
 O TwinForge instalado **não sobe sem login numa instância da organização**. Instalar é o primeiro
 passo; o segundo é o enrollment.
 
@@ -68,6 +74,7 @@ abaixo e recusam a instalação quando algo não bate — a mensagem sempre diz 
       "url": "https://.../twinforge-2026.816.0-darwin-arm64.tar.gz",
       "sha256": "2222222222222222222222222222222222222222222222222222222222222222"
     },
+    "darwin-x64":  { "url": "https://...", "sha256": "..." },
     "linux-x64":  { "url": "https://...", "sha256": "..." },
     "win-x64":    { "url": "https://...", "sha256": "..." }
   }
