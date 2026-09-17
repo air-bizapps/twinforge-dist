@@ -2,24 +2,29 @@
   "schemaVersion": 2,
   "channel": "canary",
   "keyId": "2026-08-canary",
-  "sequence": 8,
-  "version": "2026.915.0",
-  "minSupported": "2026.909.0",
+  "sequence": 9,
+  "version": "2026.917.0",
+  "minSupported": "2026.915.0",
   "artifacts": {
     "darwin-arm64": {
-      "url": "https://github.com/air-bizapps/twinforge-dist/releases/download/tfapp.v2026.915.0/twinforge-2026.915.0-darwin-arm64.tar.gz",
-      "sha256": "21e903096a6b612b87ef09da35791add20b31adbd988799e40a73ad6c1bb74f0",
-      "sizeBytes": 232217406
+      "url": "https://github.com/air-bizapps/twinforge-dist/releases/download/tfapp.v2026.917.0/twinforge-2026.917.0-darwin-arm64.tar.gz",
+      "sha256": "1a31d022bb140ddc3c67df5bdaa196c6f3de4dbb3a24b20473781c10d8c50364",
+      "sizeBytes": 232365306
+    },
+    "darwin-x64": {
+      "url": "https://github.com/air-bizapps/twinforge-dist/releases/download/tfapp.v2026.917.0/twinforge-2026.917.0-darwin-x64.tar.gz",
+      "sha256": "08f976ad9f1d32f879f22db169bf0fd16b567a4b27d6e1cd88beca4392085257",
+      "sizeBytes": 235574328
     },
     "linux-x64": {
-      "url": "https://github.com/air-bizapps/twinforge-dist/releases/download/tfapp.v2026.915.0/twinforge-2026.915.0-linux-x64.tar.gz",
-      "sha256": "fe9807d0c7969cbc2c0c9221dcc75a31fd09bf95946587637c4b227858768bbf",
-      "sizeBytes": 175212977
+      "url": "https://github.com/air-bizapps/twinforge-dist/releases/download/tfapp.v2026.917.0/twinforge-2026.917.0-linux-x64.tar.gz",
+      "sha256": "cdde491fbb9ac71a247bdb343425f73bdac9d6ef20e0d51191b5ce9132fc3655",
+      "sizeBytes": 175349050
     },
     "win-x64": {
-      "url": "https://github.com/air-bizapps/twinforge-dist/releases/download/tfapp.v2026.915.0/twinforge-2026.915.0-win-x64.tar.gz",
-      "sha256": "b6cc3715f50b9b8b1598ad2093692f58c25f017ae07b63e9f818043715d69455",
-      "sizeBytes": 131347230
+      "url": "https://github.com/air-bizapps/twinforge-dist/releases/download/tfapp.v2026.917.0/twinforge-2026.917.0-win-x64.tar.gz",
+      "sha256": "b0bd137dfd13d0b623fc23274580944cfb6f73a605917f217937e6b819634ad0",
+      "sizeBytes": 131506941
     }
   }
 }
