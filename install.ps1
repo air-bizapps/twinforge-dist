@@ -1233,12 +1233,27 @@ try {
     # File.Replace fail rather than succeed. If it succeeds, the swap is still
     # the safe way to do it; if it fails, the message below is the right one.
     # Either way the old launcher survives, which is the property that matters.
+    # Still unverified after the fix below, and for a new reason: until it, this
+    # branch threw before any share mode could decide anything, so the question
+    # was never actually reached on a real machine.
+    #
+    # [NullString]::Value, not $null, for destinationBackupFileName. PowerShell
+    # converts $null to the EMPTY STRING when the parameter it binds to is typed
+    # [string], and File.Replace with "" raises ArgumentException, "The path has
+    # an invalid format" -- every time, with or without anything running. This
+    # branch is only reached when bin\twinforge.cmd already exists, so a first
+    # install always took the Move below and never touched it; reinstalling over
+    # an existing tree is what hit it, and it failed with the message further
+    # down, blaming a running TwinForge for something that has nothing to do
+    # with one. Measured on Windows 11, PowerShell 5.1.26100.9444: $null throws,
+    # [NullString]::Value swaps, a real backup path swaps. The monorepo's
+    # doc/windows-verification.md, item 10, has the reproduction.
     $BinDir = Join-Path $AppDir "bin"
     try {
         New-Item -ItemType Directory -Path $BinDir -Force | Out-Null
         Copy-Item -LiteralPath $ExtractedLauncher -Destination $LauncherStagePath -Force
         if (Test-Path -LiteralPath $LauncherPath -PathType Leaf) {
-            [System.IO.File]::Replace($LauncherStagePath, $LauncherPath, $null)
+            [System.IO.File]::Replace($LauncherStagePath, $LauncherPath, [NullString]::Value)
         } else {
             [System.IO.File]::Move($LauncherStagePath, $LauncherPath)
         }
