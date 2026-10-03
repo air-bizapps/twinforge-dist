@@ -1,6 +1,6 @@
 # TwinForge installer (Windows).
 #
-#   irm https://raw.githubusercontent.com/air-bizapps/twinforge-dist/main/install.ps1 | iex
+#   irm https://dist.twinforge.webjump.ai/install.ps1 | iex
 #
 # Installs into $env:USERPROFILE\.twinforge\app and prints the next step
 # (enrollment) when done. Safe to re-run: if the channel's version is already
@@ -124,7 +124,7 @@ function Assert-ManifestUrl([string]$Url) {
 }
 
 $Channel = if ($env:TWINFORGE_CHANNEL) { $env:TWINFORGE_CHANNEL } else { "canary" }
-$BaseUrl = if ($env:TWINFORGE_DIST_BASE_URL) { $env:TWINFORGE_DIST_BASE_URL } else { "https://raw.githubusercontent.com/air-bizapps/twinforge-dist/main" }
+$BaseUrl = if ($env:TWINFORGE_DIST_BASE_URL) { $env:TWINFORGE_DIST_BASE_URL } else { "https://dist.twinforge.webjump.ai" }
 
 # --- Platform detection -------------------------------------------------------
 # v1 supports win-x64 only (see docs/superpowers/specs/2026-08-15-distribuicao-e-update-design.md, E3).
@@ -232,7 +232,7 @@ function Get-HostArchitecture {
 }
 
 if (-not (Test-WindowsHost)) {
-    Fail "This installer is for Windows.`nOn macOS and Linux, run install.sh instead:`n  curl -fsSL https://raw.githubusercontent.com/air-bizapps/twinforge-dist/main/install.sh | sh"
+    Fail "This installer is for Windows.`nOn macOS and Linux, run install.sh instead:`n  curl -fsSL https://dist.twinforge.webjump.ai/install.sh | sh"
 }
 
 $arch = Get-HostArchitecture
@@ -806,8 +806,9 @@ Assert-ManifestUrl $ManifestUrl
 Write-Host "Fetching the $Channel channel manifest..."
 # Parse the document ourselves rather than letting Invoke-RestMethod decide.
 # Invoke-RestMethod only deserializes when the response carries a JSON content
-# type, and the default host here -- raw.githubusercontent.com -- serves .json as
-# `text/plain; charset=utf-8` with nosniff. Under Invoke-RestMethod the manifest
+# type, and a host this has used -- raw.githubusercontent.com -- serves .json as
+# `text/plain; charset=utf-8` with nosniff (the default host today, GitHub Pages,
+# sends application/json, but the content type is not ours to rely on). Under Invoke-RestMethod the manifest
 # would come back as a plain string, every property read below would be $null,
 # and the script would abort telling the developer that our manifest is
 # malformed -- blaming the publisher for a bug on this side, on the first command

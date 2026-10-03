@@ -1,7 +1,7 @@
 #!/bin/sh
 # TwinForge installer (macOS, Linux).
 #
-#   curl -fsSL https://raw.githubusercontent.com/air-bizapps/twinforge-dist/main/install.sh | sh
+#   curl -fsSL https://dist.twinforge.webjump.ai/install.sh | sh
 #
 # Installs into ~/.twinforge/app and prints the next step (enrollment) when
 # done. Safe to re-run: if the channel's version is already installed, it
@@ -693,7 +693,7 @@ main() {
   export LC_ALL
 
   CHANNEL="${TWINFORGE_CHANNEL:-canary}"
-  BASE_URL="${TWINFORGE_DIST_BASE_URL:-https://raw.githubusercontent.com/air-bizapps/twinforge-dist/main}"
+  BASE_URL="${TWINFORGE_DIST_BASE_URL:-https://dist.twinforge.webjump.ai}"
 
   need_cmd curl
   need_cmd tar
