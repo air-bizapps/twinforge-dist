@@ -8,10 +8,12 @@
 # just repoints `current` and exits.
 #
 # Env overrides:
-#   TWINFORGE_CHANNEL       channel to install (default: canary). `stable`
-#                           stays closed until enrollment exists.
+#   TWINFORGE_CHANNEL       channel to install (default: stable; `canary`
+#                           gets every release first). The installer writes
+#                           it to your shell startup file, so updates keep
+#                           coming from the channel you installed from.
 #   TWINFORGE_DIST_BASE_URL base URL serving channels/<channel>.json
-#                           (default: this repo's raw main branch). Used for
+#                           (default: https://dist.twinforge.webjump.ai). Used for
 #                           testing against a local manifest.
 #   TWINFORGE_HOME          overrides the install root (default: ~/.twinforge),
 #                           matching what the installed server itself honors.
@@ -630,6 +632,62 @@ add_bin_to_path() {
   fi
 }
 
+# The updater reads TWINFORGE_CHANNEL on every run and falls back to `canary`
+# when it is unset (packaging/updater/cli.mjs in twinf-forge). Without this, a
+# `stable` install would quietly start updating from `canary` the first time it
+# ran from a new shell. So the channel goes into the same startup file as PATH,
+# with the same rules: never fatal, never duplicated, and when the shell is
+# unknown, hand over the exact line instead of guessing. A re-run with another
+# channel replaces the line this script wrote rather than appending a second one.
+remember_channel() {
+  case "$CHANNEL" in
+    '' | *[!a-z0-9-]*) return 0 ;;
+  esac
+  channel_line="export TWINFORGE_CHANNEL=\"$CHANNEL\""
+  profile="$(path_profile_file)"
+
+  if [ -z "$profile" ]; then
+    say "" \
+      "To keep updating from the $CHANNEL channel, add this line to your shell's" \
+      "startup file too:" \
+      "" \
+      "  $channel_line"
+    return 0
+  fi
+
+  if [ -f "$profile" ] && grep -qxF "$channel_line" "$profile" 2>/dev/null; then
+    return 0
+  fi
+
+  if [ -f "$profile" ] && grep -qE '^export TWINFORGE_CHANNEL="[a-z0-9-]*"$' "$profile" 2>/dev/null; then
+    # A previous run wrote another channel. Rewrite that line in place; the
+    # temporary file lives next to the profile so the final mv is a rename.
+    channel_tmp="$profile.twinforge-channel.$$"
+    if sed "s/^export TWINFORGE_CHANNEL=\"[a-z0-9-]*\"\$/export TWINFORGE_CHANNEL=\"$CHANNEL\"/" "$profile" > "$channel_tmp" 2>/dev/null \
+      && mv "$channel_tmp" "$profile" 2>/dev/null; then
+      say "Updates now come from the $CHANNEL channel ($profile)."
+    else
+      rm -f "$channel_tmp" 2>/dev/null
+      say "" \
+        "TwinForge is installed, but the channel line in $profile could not be" \
+        "rewritten. Change it yourself to:" \
+        "" \
+        "  $channel_line"
+    fi
+    return 0
+  fi
+
+  if printf '\n# Added by the TwinForge installer: update channel\n%s\n' "$channel_line" 2>/dev/null >> "$profile"; then
+    say "Updates will come from the $CHANNEL channel ($profile)."
+  else
+    say "" \
+      "TwinForge is installed, but $profile could not be written. To keep" \
+      "updating from the $CHANNEL channel, add this line to it yourself:" \
+      "" \
+      "  $channel_line"
+  fi
+}
+
 # Say what the next command actually is, and say it truthfully. This text has
 # been wrong twice, in opposite directions, and both times because it described
 # an intention rather than the code:
@@ -692,7 +750,7 @@ main() {
   LC_ALL=C
   export LC_ALL
 
-  CHANNEL="${TWINFORGE_CHANNEL:-canary}"
+  CHANNEL="${TWINFORGE_CHANNEL:-stable}"
   BASE_URL="${TWINFORGE_DIST_BASE_URL:-https://dist.twinforge.webjump.ai}"
 
   need_cmd curl
@@ -911,6 +969,7 @@ installer cannot read is a publishing bug, not something to work around."
     say "TwinForge $VERSION is already installed."
     point_current "$VERSION_DIR"
     add_bin_to_path
+    remember_channel
     print_next_steps
     exit 0
   fi
@@ -1008,6 +1067,7 @@ The download may be corrupted or tampered with. Try again, and if it keeps happe
 
   point_current "$VERSION_DIR"
   add_bin_to_path
+  remember_channel
   print_next_steps
 }
 

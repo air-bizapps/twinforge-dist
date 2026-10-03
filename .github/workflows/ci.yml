@@ -54,6 +54,10 @@ jobs:
       - run: sh tests/platform-detection-test.sh
       - run: sh tests/url-validation-test.sh
       - run: sh tests/truncation-test.sh
+      # The updater falls back to canary when TWINFORGE_CHANNEL is unset, so the
+      # installer has to write the channel down or a stable install drifts on
+      # its first update from a new shell.
+      - run: sh tests/remember-channel-test.sh
       # Real RSA-3072 keys, real openssl signatures, generated in the job. The
       # cases that matter are the refusals: an altered byte, another key, a
       # truncated signature, a renamed channel, an unknown keyId, and no keys at

@@ -16,8 +16,9 @@ curl -fsSL https://dist.twinforge.webjump.ai/install.sh | sh
 irm https://dist.twinforge.webjump.ai/install.ps1 | iex
 ```
 
-Ambos instalam do canal `canary`, que é o único canal aberto por ora — `stable` só abre quando o
-enrollment existir. Para instalar de outro canal: `TWINFORGE_CHANNEL=<canal>`.
+Ambos instalam do canal `stable` por padrão. Para receber cada release antes, instale do `canary`:
+`TWINFORGE_CHANNEL=canary`. O instalador grava o canal escolhido (no arquivo de inicialização do
+shell, ou como variável de ambiente do usuário no Windows), e as atualizações seguem vindo dele.
 
 ### O que precisa estar instalado
 
@@ -44,7 +45,7 @@ passo; o segundo é o enrollment.
 
 | Variável | Efeito |
 |---|---|
-| `TWINFORGE_CHANNEL` | canal a instalar (padrão `canary`) |
+| `TWINFORGE_CHANNEL` | canal a instalar (padrão `stable`); o instalador o grava para as atualizações seguirem no mesmo canal |
 | `TWINFORGE_HOME` | raiz da instalação (padrão `~/.twinforge`, `%USERPROFILE%\.twinforge` no Windows) |
 | `TWINFORGE_DIST_BASE_URL` | base que serve `channels/<canal>.json`. Override de teste local; use para apontar a um manifest servido na sua máquina |
 | `TWINFORGE_DIST_PUBKEY_FILE` | (`install.sh`) PEM de chave pública a aceitar **no lugar** das chaves embutidas, sob o id `local-test`. Para testar um manifest assinado localmente |
@@ -116,24 +117,18 @@ declarava sucesso.
 
 ## Canais
 
-- `channels/canary.json` — versões de validação interna; **o único canal aberto hoje**, e o padrão
-  dos dois instaladores
-- `channels/stable.json` — liberado apenas quando o enrollment existir
+- `channels/canary.json` — recebe cada release (`tfapp.v*`) assim que ela é publicada; é onde uma
+  versão é validada antes de ir para todos
+- `channels/stable.json` — o padrão dos dois instaladores. Recebe só versões que já passaram pelo
+  `canary`, promovidas sem rebuild pelo workflow `promote-channel` do repositório de produto, com os
+  mesmos tarballs da Release e a mesma assinatura com aprovação humana
 
-Nenhum dos dois existe ainda: eles nascem quando o pipeline do repositório de produto publica a
-primeira release. Até lá os instaladores buscam o manifest e param num 404.
-
-### Antes de publicar a primeira release
-
-Os verificadores estão nos dois instaladores e a chave pública `2026-08-canary` já está embutida nos
-dois. **Nenhuma release foi publicada ainda** — `channels/` continua vazio até a primeira tag
-`tfapp.v*` rodar no repositório de produto, e até lá os instaladores param num 404. Falhar fechado é o
-desenho, e uma fase "aceita qualquer coisa enquanto a gente se organiza" é exatamente o buraco que quem
-consegue escrever neste repositório usaria.
+Os verificadores estão nos dois instaladores e a chave pública `2026-08-canary` vale para os dois
+canais. Um canal sem manifest publicado faz o instalador parar num 404: falhar fechado é o desenho.
 
 Quem publica é o pipeline da §3 do desenho
 (`docs/superpowers/specs/2026-08-17-assinatura-do-manifest-design.md`, no repositório de produto): três
-jobs, sendo o do meio um `sign` num Environment com revisores obrigatórios, restrito a refs de tag, cujo
+jobs, sendo o do meio um `sign` num Environment com revisores obrigatórios, restrito às tags `tfapp.v*` e ao `master` (de onde roda a promoção para o `stable`), cujo
 único segredo é a chave privada e cujo único produto é o `.sig`. Quem tem o token de escrita **neste**
 repositório não consegue produzir assinatura, e quem aprova a assinatura não usa o token — é essa
 separação que faz os dois conjuntos de pessoas pararem de ser intercambiáveis.
