@@ -7,10 +7,12 @@
 # installed, it just repoints `current` and exits.
 #
 # Env overrides:
-#   TWINFORGE_CHANNEL       channel to install (default: canary). `stable`
-#                           stays closed until enrollment exists.
+#   TWINFORGE_CHANNEL       channel to install (default: stable; `canary`
+#                           gets every release first). Saved as a user
+#                           environment variable, so updates keep coming
+#                           from the channel you installed from.
 #   TWINFORGE_DIST_BASE_URL base URL serving channels/<channel>.json
-#                           (default: this repo's raw main branch). Used for
+#                           (default: https://dist.twinforge.webjump.ai). Used for
 #                           testing against a local manifest.
 #   TWINFORGE_HOME          overrides the install root (default:
 #                           $env:USERPROFILE\.twinforge), matching what the
@@ -123,7 +125,7 @@ function Assert-ManifestUrl([string]$Url) {
     }
 }
 
-$Channel = if ($env:TWINFORGE_CHANNEL) { $env:TWINFORGE_CHANNEL } else { "canary" }
+$Channel = if ($env:TWINFORGE_CHANNEL) { $env:TWINFORGE_CHANNEL } else { "stable" }
 $BaseUrl = if ($env:TWINFORGE_DIST_BASE_URL) { $env:TWINFORGE_DIST_BASE_URL } else { "https://dist.twinforge.webjump.ai" }
 
 # --- Platform detection -------------------------------------------------------
@@ -709,6 +711,26 @@ function Get-PathEntryKey([string]$Entry) {
 # 1024-character truncation people remember belongs to setx and the legacy
 # System Properties dialog; nothing here asserts either way, and nothing here
 # truncates.
+# The updater reads TWINFORGE_CHANNEL on every run and falls back to `canary`
+# when it is unset (packaging/updater/cli.mjs in twinf-forge). Without this, a
+# `stable` install would quietly start updating from `canary` from the next
+# terminal on. Same rules as install.sh's remember_channel: never fatal, and a
+# re-run with another channel simply overwrites the value. Unlike PATH this is a
+# plain string with nothing to expand, so SetEnvironmentVariable is safe here.
+function Set-UserChannel {
+    if ($Channel -notmatch '^[a-z0-9-]+$') { return }
+    $current = $null
+    try { $current = [Environment]::GetEnvironmentVariable("TWINFORGE_CHANNEL", "User") } catch { $current = $null }
+    if ($current -eq $Channel) { return }
+    try {
+        [Environment]::SetEnvironmentVariable("TWINFORGE_CHANNEL", $Channel, "User")
+        $env:TWINFORGE_CHANNEL = $Channel
+        Write-Host "Updates will come from the $Channel channel (user environment variable TWINFORGE_CHANNEL)."
+    } catch {
+        Write-Host "TwinForge is installed, but TWINFORGE_CHANNEL could not be saved. To keep updating from the $Channel channel, set the user environment variable TWINFORGE_CHANNEL=$Channel yourself."
+    }
+}
+
 function Add-BinToUserPath {
     $binDir = Join-Path $AppDir "bin"
     $binKey = Get-PathEntryKey $binDir
@@ -1023,6 +1045,7 @@ if ((Test-Path -LiteralPath $InstalledMarker -PathType Leaf) -and (Test-Path -Li
     Write-Host "TwinForge $Version is already installed."
     Set-Current $VersionDir
     Add-BinToUserPath
+    Set-UserChannel
     Write-NextSteps
     # `return`, not `exit`: at the top level of the block (not inside a
     # function) it ends the block the same way reaching its closing brace
@@ -1283,6 +1306,7 @@ try {
 
 Set-Current $VersionDir
 Add-BinToUserPath
+Set-UserChannel
 Write-NextSteps
 
 # The closing brace of the block opened at the top of the file, and the `&`
