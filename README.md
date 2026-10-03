@@ -9,11 +9,11 @@ publicados aqui.
 ## Instalação
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/air-bizapps/twinforge-dist/main/install.sh | sh
+curl -fsSL https://dist.twinforge.webjump.ai/install.sh | sh
 ```
 
 ```powershell
-irm https://raw.githubusercontent.com/air-bizapps/twinforge-dist/main/install.ps1 | iex
+irm https://dist.twinforge.webjump.ai/install.ps1 | iex
 ```
 
 Ambos instalam do canal `canary`, que é o único canal aberto por ora — `stable` só abre quando o
