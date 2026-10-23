@@ -1,0 +1,917 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>TwinForge Outubro 2026</title>
+<meta name="description" content="O que saiu da forja em outubro: Competence Map, Skill Miner, Conference Room com histórico, ações em lote e uma frota que se atualiza sozinha.">
+<link rel="canonical" href="https://dist.twinforge.webjump.ai/novidades/2026-10/">
+<link rel="icon" type="image/png" href="assets/twinforge-mark.png">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://dist.twinforge.webjump.ai/novidades/2026-10/">
+<meta property="og:title" content="TwinForge · Outubro na forja">
+<meta property="og:description" content="Agentes que aprendem com o próprio histórico, conversas de verdade na Conference Room e uma frota que se atualiza com prazo e rollback.">
+<meta property="og:image" content="https://dist.twinforge.webjump.ai/novidades/2026-10/shots/og.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700;800&family=Schibsted+Grotesk:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: a "forge ledger". October is a heat rail where each release glows;
+   three chapters follow, each with a working mock of the feature instead of a screenshot. */
+:root {
+  --bg: #eef1f5;          /* cool steel paper */
+  --surface: #ffffff;
+  --sunken: #e3e8ef;
+  --ink: #131923;
+  --muted: #566173;
+  --line: #d3d9e2;
+  --heat: #4f46e5;        /* brand indigo, text-safe on light */
+  --heat-hot: #1e9bff;    /* the cyan-blue at the heart of the TF mark */
+  --heat-deep: #7c3aed;   /* the violet face of the TF mark */
+  --good: #1f8a5b;
+  --warn: #b7791f;
+  --bad: #c2255c;
+  --none: #9aa4b2;
+  --cell-good: #d6f0e3;
+  --cell-mid: #fbedd3;
+  --cell-bad: #f8d7e3;
+  --term-bg: #10151d;
+  --term-ink: #d7dee8;
+
+  --f-display: "Unbounded", "Arial Black", system-ui, sans-serif;
+  --f-body: "Schibsted Grotesk", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --step--1: 0.84rem;
+  --step-0: 1rem;
+  --step-1: 1.2rem;
+  --step-2: 1.6rem;
+  --step-3: clamp(1.9rem, 3.4vw, 2.6rem);
+  --step-4: clamp(2.4rem, 6.4vw, 5rem);
+  --r: 14px;
+  --measure: 64ch;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0c1016; --surface: #141a23; --sunken: #1b2230; --ink: #e9edf3; --muted: #9aa5b6;
+    --line: #262f3d; --heat: #8f97ff; --heat-hot: #3fb4ff; --heat-deep: #a174ff;
+    --good: #4cc38a; --warn: #e3a948; --bad: #f0508a; --none: #5d6878;
+    --cell-good: #143528; --cell-mid: #3a2c12; --cell-bad: #3d1626;
+    --term-bg: #07090d; --term-ink: #d7dee8;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0c1016; --surface: #141a23; --sunken: #1b2230; --ink: #e9edf3; --muted: #9aa5b6;
+  --line: #262f3d; --heat: #8f97ff; --heat-hot: #3fb4ff; --heat-deep: #a174ff;
+  --good: #4cc38a; --warn: #e3a948; --bad: #f0508a; --none: #5d6878;
+  --cell-good: #143528; --cell-mid: #3a2c12; --cell-bad: #3d1626;
+  --term-bg: #07090d; --term-ink: #d7dee8;
+  color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font: 400 var(--step-0)/1.6 var(--f-body);
+  -webkit-font-smoothing: antialiased;
+}
+img { max-width: 100%; }
+[hidden] { display: none !important; }
+a { color: inherit; text-decoration-color: var(--heat); text-underline-offset: 3px; }
+a:focus-visible, button:focus-visible { outline: 2px solid var(--heat); outline-offset: 3px; border-radius: 4px; }
+code, .mono { font-family: var(--f-mono); font-size: 0.88em; }
+:not(pre) > code { background: var(--sunken); padding: 0.08em 0.38em; border-radius: 5px; }
+
+.wrap {
+  max-width: 1120px; margin-inline: auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+
+/* ---------- hero ---------- */
+.hero { --mark-w: clamp(140px, 22vw, 300px); padding-block: clamp(40px, 8vw, 96px) 40px; position: relative; isolation: isolate; }
+.hero > * { position: relative; z-index: 1; }
+.hero > canvas.sparks { position: absolute; z-index: 0; inset: 0 0 auto 0; width: 100%; height: 100%; pointer-events: none; }
+.brand { display: flex; align-items: center; gap: 10px; font: 600 var(--step--1)/1 var(--f-mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.brand .anvil { width: 24px; height: 24px; }
+.hero > img.hero-mark {
+  position: absolute; z-index: 0; right: max(16px, env(safe-area-inset-right, 0px)); top: clamp(40px, 7vw, 88px);
+  width: var(--mark-w); height: auto;
+  filter: drop-shadow(0 0 28px color-mix(in oklab, var(--heat-hot) 55%, transparent)) drop-shadow(0 0 60px color-mix(in oklab, var(--heat-deep) 40%, transparent));
+  animation: float 7s ease-in-out infinite;
+}
+@keyframes float { 0%, 100% { transform: translateY(0) rotate(0deg); } 50% { transform: translateY(-10px) rotate(-1.5deg); } }
+.hero h1 {
+  font: 800 var(--step-4)/0.98 var(--f-display); letter-spacing: -0.03em;
+  margin: 28px 0 0; text-wrap: balance; max-width: min(15ch, calc(100% - var(--mark-w) - 24px));
+}
+.hero h1 .hot {
+  background: linear-gradient(100deg, var(--heat-hot) 0%, var(--heat) 40%, var(--heat-deep) 100%);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.hero .lede { font-size: var(--step-1); color: var(--muted); max-width: min(52ch, 62%); margin: 24px 0 0; text-wrap: pretty; }
+
+/* October heat rail */
+.rail { margin-top: 64px; }
+.rail-head { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; flex-wrap: wrap; font: 500 var(--step--1)/1.2 var(--f-mono); color: var(--muted); }
+.rail-track {
+  position: relative; margin-top: 14px; height: 76px;
+  border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
+  overflow: hidden;
+}
+.rail-days { position: absolute; inset: 0; display: grid; grid-template-columns: repeat(31, 1fr); }
+.rail-days span { border-left: 1px solid var(--line); opacity: 0.55; }
+.rail-days span:nth-child(5n+1) { opacity: 1; }
+.rail-mark {
+  position: absolute; top: 0; bottom: 0; width: 3px; transform: translateX(-1px);
+  background: linear-gradient(var(--heat-hot), var(--heat-deep));
+}
+.rail-mark::after {
+  content: ""; position: absolute; left: 50%; top: 50%; width: 46px; height: 46px; transform: translate(-50%, -50%);
+  background: radial-gradient(circle, color-mix(in oklab, var(--heat-hot) 55%, transparent) 0%, transparent 70%);
+  animation: glow 3.2s ease-in-out infinite; animation-delay: var(--d, 0s);
+}
+@keyframes glow { 0%, 100% { opacity: 0.45; transform: translate(-50%, -50%) scale(0.85); } 50% { opacity: 1; transform: translate(-50%, -50%) scale(1.15); } }
+.rail-labels { position: relative; height: 80px; margin-top: 8px; }
+.rail-labels span {
+  position: absolute; transform: translateX(-50%); white-space: nowrap;
+  font: 600 0.72rem/1.25 var(--f-mono); color: var(--ink); text-align: center;
+}
+.rail-labels span small { display: block; font-weight: 400; color: var(--muted); }
+.rail-labels .lo { top: 26px; }
+.rail-labels .lo2 { top: 52px; }
+.rail-scale { display: flex; justify-content: space-between; font: 400 0.72rem/1 var(--f-mono); color: var(--muted); margin-top: 6px; }
+
+/* table of contents */
+.toc { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; margin-top: 56px; }
+.toc a {
+  display: grid; gap: 6px; padding: 18px 18px 20px; text-decoration: none;
+  border-top: 3px solid var(--ink); background: var(--surface); border-radius: 0 0 var(--r) var(--r);
+  transition: border-color .2s, transform .2s;
+}
+.toc a:hover { border-top-color: var(--heat); transform: translateY(-2px); }
+.toc b { font: 700 var(--step-1)/1.2 var(--f-display); letter-spacing: -0.01em; }
+.toc span { color: var(--muted); font-size: var(--step--1); }
+.toc i { font: 600 0.72rem/1 var(--f-mono); color: var(--heat); font-style: normal; letter-spacing: 0.08em; text-transform: uppercase; }
+
+/* ---------- chapters ---------- */
+.chapter { padding-block: clamp(72px, 11vw, 144px) 0; }
+.chapter-head { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; max-width: 760px; }
+.eyebrow { font: 600 var(--step--1)/1 var(--f-mono); color: var(--heat); letter-spacing: 0.1em; text-transform: uppercase; }
+.chapter h2 { font: 700 var(--step-3)/1.05 var(--f-display); letter-spacing: -0.025em; margin: 0; text-wrap: balance; }
+.chapter-head p { margin: 0; color: var(--muted); font-size: var(--step-1); max-width: var(--measure); text-wrap: pretty; }
+
+.feature { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: clamp(28px, 5vw, 72px); align-items: start; margin-top: clamp(56px, 8vw, 96px); }
+.feature.flip { grid-template-columns: minmax(0, 6fr) minmax(0, 5fr); }
+.feature.flip .copy { order: 2; }
+.copy { display: grid; gap: 18px; min-width: 0; }
+.copy h3 { font: 700 var(--step-2)/1.15 var(--f-display); letter-spacing: -0.02em; margin: 0; text-wrap: balance; }
+.copy p { margin: 0; max-width: var(--measure); }
+.copy ul { margin: 0; padding-left: 1.1em; display: grid; gap: 8px; }
+.copy li::marker { color: var(--heat); }
+.where { font: 500 var(--step--1)/1.4 var(--f-mono); color: var(--muted); }
+.where b { color: var(--ink); font-weight: 600; }
+
+.mock {
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r);
+  box-shadow: 0 1px 0 var(--line), 0 24px 48px -32px color-mix(in oklab, var(--ink) 45%, transparent);
+  overflow: hidden; min-width: 0;
+}
+.mock-bar { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--line); font: 500 0.78rem/1 var(--f-mono); color: var(--muted); background: var(--sunken); }
+.mock-bar .dots { display: flex; gap: 5px; }
+.mock-bar .dots i { width: 9px; height: 9px; border-radius: 50%; background: var(--line); }
+.mock-bar .url { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mock-body { padding: 18px; }
+.example-tag { font: 600 0.68rem/1 var(--f-mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); border: 1px dashed var(--line); padding: 4px 6px; border-radius: 4px; white-space: nowrap; }
+
+/* competence grid */
+.cm-agent { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.cm-agent strong { font: 700 var(--step-1)/1.2 var(--f-display); }
+.cm-agent span { color: var(--muted); font-size: var(--step--1); }
+.cm-scroll { overflow-x: auto; }
+.cm { border-collapse: separate; border-spacing: 4px; width: 100%; min-width: 420px; font-variant-numeric: tabular-nums; }
+.cm th { font: 500 0.74rem/1.2 var(--f-mono); color: var(--muted); text-align: left; padding: 4px 6px; }
+.cm thead th { text-align: center; }
+.cm td { text-align: center; padding: 12px 4px; border-radius: 8px; font: 600 0.95rem/1 var(--f-mono); }
+.cm td small { display: block; font: 400 0.66rem/1.3 var(--f-mono); color: var(--muted); margin-top: 4px; }
+.cm .g { background: var(--cell-good); color: var(--good); }
+.cm .m { background: var(--cell-mid); color: var(--warn); }
+.cm .b { background: var(--cell-bad); color: var(--bad); }
+.cm .n { background: var(--sunken); color: var(--none); }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 14px; font-size: var(--step--1); color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+
+/* signal waterfall */
+.signal { display: grid; gap: 10px; font-variant-numeric: tabular-nums; }
+.sig-row { display: grid; grid-template-columns: minmax(0, 13rem) minmax(0, 1fr) 3.2rem; gap: 12px; align-items: center; font-size: var(--step--1); }
+.sig-row .lbl { color: var(--muted); min-width: 0; }
+.sig-row .val { font: 600 0.88rem/1 var(--f-mono); text-align: right; }
+.sig-track { position: relative; height: 14px; background: var(--sunken); border-radius: 4px; }
+.sig-fill { position: absolute; top: 0; bottom: 0; border-radius: 4px; }
+.sig-row.start .sig-fill { background: var(--ink); }
+.sig-row.loss .sig-fill { background: var(--bad); opacity: 0.85; }
+.sig-row.total .sig-fill { background: linear-gradient(90deg, var(--heat-hot), var(--heat)); }
+.sig-row.total .lbl, .sig-row.total .val { color: var(--ink); font-weight: 600; }
+
+/* miner pipeline */
+.pipe { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; counter-reset: p; }
+.pipe li { position: relative; display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 14px; padding-bottom: 18px; counter-increment: p; }
+.pipe li::before {
+  content: counter(p); display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%;
+  font: 700 0.85rem/1 var(--f-mono); background: var(--sunken); color: var(--ink); border: 1px solid var(--line); position: relative; z-index: 1;
+}
+.pipe li:not(:last-child)::after { content: ""; position: absolute; left: 16px; top: 34px; bottom: 0; width: 2px; background: var(--line); }
+.pipe li.hot::before { background: linear-gradient(135deg, var(--heat-hot), var(--heat-deep)); color: #fff; border-color: transparent; }
+.pipe b { display: block; font-weight: 600; }
+.pipe span { color: var(--muted); font-size: var(--step--1); }
+.badge-new { display: inline-block; font: 700 0.66rem/1 var(--f-mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--heat); border: 1px solid currentColor; padding: 3px 6px; border-radius: 999px; vertical-align: 2px; margin-left: 6px; }
+
+/* conference room */
+.cr { display: grid; grid-template-columns: minmax(0, 200px) minmax(0, 1fr); min-height: 300px; }
+.cr-hist { border-right: 1px solid var(--line); padding: 12px; display: grid; align-content: start; gap: 4px; background: var(--sunken); }
+.cr-hist h4 { margin: 0 0 6px; font: 600 0.7rem/1 var(--f-mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.cr-hist div { padding: 8px 10px; border-radius: 8px; font-size: 0.84rem; line-height: 1.3; }
+.cr-hist div small { display: block; color: var(--muted); font: 400 0.68rem/1.3 var(--f-mono); margin-top: 2px; }
+.cr-hist .on { background: var(--surface); box-shadow: inset 3px 0 0 var(--heat); }
+.cr-chat { padding: 16px; display: grid; align-content: start; gap: 12px; min-width: 0; }
+.bubble { max-width: 88%; padding: 10px 14px; border-radius: 14px; font-size: 0.9rem; line-height: 1.45; }
+.bubble.me { justify-self: end; background: var(--ink); color: var(--bg); border-bottom-right-radius: 4px; }
+.bubble.bot { background: var(--sunken); border-bottom-left-radius: 4px; }
+.bubble.bot b { display: block; font: 600 0.7rem/1 var(--f-mono); color: var(--heat); margin-bottom: 6px; letter-spacing: 0.06em; text-transform: uppercase; }
+.typing { display: flex; align-items: center; gap: 8px; font: 400 0.74rem/1 var(--f-mono); color: var(--muted); }
+.typing i { width: 6px; height: 6px; border-radius: 50%; background: var(--heat); animation: blink 1.2s infinite; }
+.typing i:nth-child(2) { animation-delay: .2s; } .typing i:nth-child(3) { animation-delay: .4s; }
+@keyframes blink { 0%, 100% { opacity: .25; } 50% { opacity: 1; } }
+
+/* bulk actions */
+.tasks { display: grid; gap: 0; font-size: 0.88rem; }
+.task { display: grid; grid-template-columns: 22px 6.2rem minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+.task .box { width: 16px; height: 16px; border: 1.5px solid var(--muted); border-radius: 4px; display: grid; place-items: center; }
+.task.sel { background: color-mix(in oklab, var(--heat) 9%, var(--surface)); }
+.task.sel .box { background: var(--heat); border-color: var(--heat); }
+.task.sel .box::after { content: ""; width: 8px; height: 4px; border: 2px solid #fff; border-top: 0; border-right: 0; transform: rotate(-45deg) translate(1px, -1px); }
+.task .id { font: 500 0.78rem/1 var(--f-mono); color: var(--muted); }
+.task .t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pill { font: 500 0.7rem/1 var(--f-mono); padding: 4px 8px; border-radius: 999px; background: var(--sunken); color: var(--muted); white-space: nowrap; }
+.bulkbar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 14px; padding: 10px 12px; border-radius: 12px;
+  background: var(--ink); color: var(--bg); font-size: 0.84rem;
+}
+.bulkbar strong { margin-right: 6px; font-family: var(--f-mono); }
+.bulkbar span { padding: 5px 9px; border-radius: 7px; background: color-mix(in oklab, var(--bg) 14%, transparent); }
+.keys { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 18px; margin-top: 4px; }
+.keys div { display: flex; align-items: center; gap: 10px; font-size: var(--step--1); color: var(--muted); }
+kbd {
+  font: 600 0.74rem/1 var(--f-mono); color: var(--ink); background: var(--surface);
+  border: 1px solid var(--line); border-bottom-width: 3px; border-radius: 6px; padding: 5px 7px; white-space: nowrap;
+}
+
+/* machines */
+.machines { width: 100%; border-collapse: collapse; font-size: 0.86rem; font-variant-numeric: tabular-nums; min-width: 460px; }
+.machines th { text-align: left; font: 500 0.7rem/1 var(--f-mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); padding: 10px 14px; border-bottom: 1px solid var(--line); }
+.machines td { padding: 12px 14px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+.machines .host { font-weight: 600; }
+.machines .ver { font-family: var(--f-mono); font-size: 0.8rem; }
+.state { display: inline-flex; align-items: center; gap: 6px; font: 500 0.74rem/1 var(--f-mono); white-space: nowrap; }
+.state::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+.state.ok { color: var(--good); } .state.held { color: var(--warn); } .state.due { color: var(--heat); }
+.menu { display: grid; gap: 2px; margin: 0 14px 14px auto; width: min(240px, calc(100% - 28px)); padding: 6px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); box-shadow: 0 14px 30px -18px color-mix(in oklab, var(--ink) 60%, transparent); font-size: 0.84rem; }
+.menu div { padding: 7px 10px; border-radius: 6px; display: flex; justify-content: space-between; gap: 10px; }
+.menu div.on { background: var(--sunken); }
+.menu small { color: var(--muted); font-family: var(--f-mono); }
+.menu hr { border: 0; border-top: 1px solid var(--line); margin: 4px 0; }
+
+/* terminal */
+.term { background: var(--term-bg); color: var(--term-ink); border-radius: var(--r); padding: 18px; font: 400 0.82rem/1.65 var(--f-mono); overflow-x: auto; }
+.term pre { margin: 0; font: inherit; }
+.term .p { color: #7f8ba0; } .term .o { color: #7cc4ff; } .term .g { color: #4cc38a; } .term .d { color: #7f8ba0; }
+
+/* small cards row */
+.trio { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; margin-top: clamp(56px, 8vw, 96px); }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 20px; display: grid; gap: 10px; align-content: start; min-width: 0; }
+.card h4 { margin: 0; font: 700 var(--step-1)/1.2 var(--f-display); letter-spacing: -0.01em; }
+.card p { margin: 0; color: var(--muted); font-size: 0.94rem; }
+.card .big { font: 800 2.4rem/1 var(--f-display); letter-spacing: -0.03em; color: var(--heat); }
+
+/* install */
+.install { margin-top: clamp(64px, 9vw, 104px); display: grid; gap: 14px; padding: clamp(20px, 4vw, 36px); border-radius: calc(var(--r) + 6px); background: var(--term-bg); color: var(--term-ink); }
+.install h3 { margin: 0; font: 700 var(--step-2)/1.15 var(--f-display); color: #fff; letter-spacing: -0.02em; }
+.install p { margin: 0; color: #a9b4c4; max-width: var(--measure); }
+.cmd { display: flex; align-items: center; gap: 12px; background: #1a212c; border: 1px solid #2a3343; border-radius: 10px; padding: 10px 10px 10px 16px; min-width: 0; }
+.cmd code { flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; background: none; padding: 0; font-size: 0.86rem; color: #e9edf3; }
+.cmd code::before { content: attr(data-shell); color: #8fb8ff; margin-right: 10px; }
+.cmd button { font: 600 0.76rem/1 var(--f-mono); color: #fff; background: linear-gradient(100deg, #1e9bff, #7c3aed); border: 0; border-radius: 7px; padding: 8px 12px; cursor: pointer; white-space: nowrap; }
+.cmd button:hover { filter: brightness(1.12); }
+
+/* more list */
+.more { margin-top: 40px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 40px; }
+.more div { padding: 16px 0; border-top: 1px solid var(--line); min-width: 0; }
+.more b { display: block; margin-bottom: 4px; }
+.more span { color: var(--muted); font-size: 0.94rem; }
+
+footer { margin-top: clamp(64px, 10vw, 120px); padding-block: 28px 40px; border-top: 1px solid var(--line); }
+footer .wrap { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; font: 400 var(--step--1)/1.5 var(--f-mono); color: var(--muted); }
+
+/* heat shimmer on the hero word */
+.hero h1 .hot { background-size: 220% 100%; animation: shimmer 6s ease-in-out infinite; }
+@keyframes shimmer { 0%, 100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
+
+/* real screenshots, with a pin showing where the feature lives */
+.shot { margin: 0; display: grid; gap: 10px; min-width: 0; perspective: 1200px; }
+.shot .frame {
+  position: relative; border-radius: var(--r); overflow: hidden; border: 1px solid var(--line); background: var(--surface);
+  box-shadow: 0 30px 60px -36px color-mix(in oklab, var(--ink) 60%, transparent);
+  transform: rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)); transform-style: preserve-3d;
+  transition: transform .25s ease-out, box-shadow .25s;
+}
+.shot .frame img { display: block; width: 100%; height: auto; }
+.shot .frame::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none; opacity: var(--glare, 0); transition: opacity .3s;
+  background: radial-gradient(420px circle at var(--gx, 50%) var(--gy, 50%), color-mix(in oklab, var(--heat-hot) 30%, transparent), transparent 60%);
+  mix-blend-mode: screen;
+}
+.shot:hover .frame { box-shadow: 0 40px 70px -34px color-mix(in oklab, var(--heat) 55%, transparent); }
+.pin { position: absolute; left: var(--x); top: var(--y); width: 0; height: 0; z-index: 2; }
+.pin::before, .pin::after {
+  content: ""; position: absolute; left: -11px; top: -11px; width: 22px; height: 22px; border-radius: 50%;
+  border: 2px solid var(--heat-hot); background: color-mix(in oklab, var(--heat-hot) 30%, transparent);
+}
+.pin::after { animation: ping 1.8s ease-out infinite; background: none; }
+@keyframes ping { 0% { transform: scale(1); opacity: 1; } 100% { transform: scale(2.6); opacity: 0; } }
+.pin em {
+  position: absolute; left: 16px; top: -12px; white-space: nowrap; font: 600 0.72rem/1 var(--f-mono); font-style: normal;
+  color: #fff; background: var(--heat); padding: 6px 8px; border-radius: 6px; box-shadow: 0 6px 16px -6px var(--heat);
+}
+.pin.left em { left: auto; right: 16px; }
+.shot figcaption { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font: 500 var(--step--1)/1.4 var(--f-mono); color: var(--muted); }
+.shot figcaption .crumb { color: var(--ink); background: var(--sunken); padding: 3px 8px; border-radius: 6px; }
+.shot figcaption .sep { color: var(--heat); }
+
+
+.shot.wide { margin-top: clamp(40px, 6vw, 64px); }
+.shot.narrow { max-width: 460px; justify-self: center; width: 100%; }
+.shot .frame video { display: block; width: 100%; height: auto; background: #0b0b0b; }
+.mock.compact { box-shadow: none; }
+.mock.compact .mock-body { padding: 14px; }
+.trio.duo { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.card-shot { width: calc(100% + 40px); max-width: none; margin: -20px -20px 6px; border-radius: var(--r) var(--r) 0 0; border-bottom: 1px solid var(--line); display: block; height: auto; }
+
+
+/* features that carry a real screenshot give the image more room */
+.feature:has(> .shot:not(.narrow)) { grid-template-columns: minmax(0, 4fr) minmax(0, 7fr); }
+.feature.flip:has(> .shot:not(.narrow)) { grid-template-columns: minmax(0, 7fr) minmax(0, 4fr); }
+.shot .frame { cursor: zoom-in; }
+.zoom-hint { margin-left: auto; color: var(--muted); }
+/* lightbox */
+.lightbox { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
+  background: color-mix(in oklab, #05070b 86%, transparent); backdrop-filter: blur(6px); cursor: zoom-out; animation: lb-in .2s ease-out; }
+.lightbox img, .lightbox video { max-width: min(1600px, 100%); max-height: 100%; width: auto; height: auto; border-radius: 12px; box-shadow: 0 40px 120px -20px #000; }
+.lightbox button { position: absolute; top: calc(14px + env(safe-area-inset-top, 0px)); right: calc(14px + env(safe-area-inset-right, 0px)); font: 600 0.8rem/1 var(--f-mono); color: #fff; background: #ffffff1f; border: 1px solid #ffffff33; border-radius: 8px; padding: 9px 12px; cursor: pointer; }
+@keyframes lb-in { from { opacity: 0; } to { opacity: 1; } }
+
+
+/* outline around the element the screenshot is about */
+.mark {
+  position: absolute; z-index: 2; left: var(--x); top: var(--y); width: var(--w); height: var(--h);
+  border: 2px solid var(--heat-hot); border-radius: 8px; pointer-events: none;
+  box-shadow: 0 0 0 4px color-mix(in oklab, var(--heat-hot) 22%, transparent), 0 0 28px color-mix(in oklab, var(--heat-hot) 45%, transparent);
+  animation: mark-pulse 2.4s ease-in-out infinite;
+}
+@keyframes mark-pulse { 0%, 100% { box-shadow: 0 0 0 3px color-mix(in oklab, var(--heat-hot) 18%, transparent), 0 0 18px color-mix(in oklab, var(--heat-hot) 35%, transparent); } 50% { box-shadow: 0 0 0 6px color-mix(in oklab, var(--heat-hot) 28%, transparent), 0 0 34px color-mix(in oklab, var(--heat-hot) 55%, transparent); } }
+.mark em {
+  position: absolute; left: -2px; bottom: calc(100% + 6px); white-space: nowrap; font: 600 0.72rem/1 var(--f-mono); font-style: normal;
+  color: #fff; background: linear-gradient(100deg, var(--heat-hot), var(--heat-deep)); padding: 6px 8px; border-radius: 6px;
+  box-shadow: 0 6px 16px -6px var(--heat-deep);
+}
+.mark.below em { bottom: auto; top: calc(100% + 6px); }
+.mark.inside em { bottom: auto; left: auto; top: 6px; right: 6px; }
+.mark.timed { opacity: 0; transition: opacity .25s; animation: none; }
+.mark.timed.on { opacity: 1; animation: mark-pulse 2.4s ease-in-out infinite; }
+@media (max-width: 560px) { .mark em { font-size: 0.62rem; padding: 4px 6px; } .mark { border-width: 1.5px; border-radius: 5px; } }
+
+/* scroll reveal: content starts dimmed and slightly lowered, never invisible */
+.js .reveal { opacity: 0.35; transform: translateY(22px); transition: opacity .7s ease, transform .7s cubic-bezier(.2,.7,.2,1); }
+.js .reveal.in { opacity: 1; transform: none; }
+.js .sig-fill { transition: width 1s cubic-bezier(.2,.7,.2,1) .2s; }
+
+@media (max-width: 860px) {
+  .hero h1 { max-width: 11ch; }
+  .feature, .feature.flip, .feature:has(> .shot:not(.narrow)), .feature.flip:has(> .shot:not(.narrow)) { grid-template-columns: minmax(0, 1fr); }
+  .feature.flip .copy { order: 0; }
+  .toc, .trio, .trio.duo { grid-template-columns: minmax(0, 1fr); }
+  .more { grid-template-columns: minmax(0, 1fr); }
+  .cr { grid-template-columns: minmax(0, 1fr); }
+  .cr-hist { border-right: 0; border-bottom: 1px solid var(--line); grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .cr-hist h4 { grid-column: 1 / -1; }
+  .sig-row { grid-template-columns: minmax(0, 1fr) 3rem; }
+  .sig-row .sig-track { grid-column: 1 / -1; grid-row: 2; }
+}
+@media (max-width: 560px) {
+  .hero > img.hero-mark { position: relative; right: auto; top: auto; display: block; width: 88px; margin-top: 24px; }
+  .hero h1 { max-width: none; margin-top: 16px; }
+  .hero .lede { max-width: none; }
+  .rail-labels span small { display: none; }
+  .rail-labels span { font-size: 0.64rem; }
+  .keys { grid-template-columns: minmax(0, 1fr); }
+  .task { grid-template-columns: 22px minmax(0, 1fr) auto; }
+  .task .id { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+</style>
+</head>
+<body>
+
+<header class="wrap hero">
+  <canvas class="sparks" aria-hidden="true"></canvas>
+  <div class="brand">
+    <img class="anvil" src="assets/twinforge-mark.png" alt="" width="24" height="24">
+    TwinForge · Novidades de outubro de 2026
+  </div>
+  <img class="hero-mark" src="assets/twinforge-mark.png" alt="Logo TwinForge" width="512" height="512">
+  <h1>Outubro na <span class="hot">forja</span></h1>
+  <p class="lede">Os agentes agora mostram onde vão bem e aprendem com o que repetem. A Conference Room ganhou conversas de verdade, as tarefas andam em lote, e a frota se atualiza sozinha, com prazo e rollback.</p>
+
+  <div class="rail" aria-label="Versões publicadas em outubro">
+    <div class="rail-head"><span>Versões publicadas em outubro</span><span>6 versões · instalável e frota</span></div>
+    <div class="rail-track">
+      <div class="rail-days" aria-hidden="true"></div>
+      <i class="rail-mark" style="left: calc(5.5 / 31 * 100%); --d: 0s"></i>
+      <i class="rail-mark" style="left: calc(7.5 / 31 * 100%); --d: .4s"></i>
+      <i class="rail-mark" style="left: calc(20.3 / 31 * 100%); --d: .8s"></i>
+      <i class="rail-mark" style="left: calc(20.7 / 31 * 100%); --d: 1.2s"></i>
+      <i class="rail-mark" style="left: calc(21.5 / 31 * 100%); --d: 1.6s"></i>
+      <i class="rail-mark" style="left: calc(22.5 / 31 * 100%); --d: 2s"></i>
+    </div>
+    <div class="rail-labels">
+      <span style="left: calc(5.5 / 31 * 100%)">1006.0<small>Competence Map</small></span>
+      <span class="lo" style="left: calc(7.5 / 31 * 100%)">1008.0<small>launcher</small></span>
+      <span style="left: calc(20.5 / 31 * 100%)">1021.0 · .1<small>rollback</small></span>
+      <span class="lo" style="left: calc(21.5 / 31 * 100%)">1022.0<small>Machines</small></span>
+      <span class="lo2" style="left: calc(22.5 / 31 * 100%)">1023.0<small>Crucible no minerador</small></span>
+    </div>
+    <div class="rail-scale" aria-hidden="true"><span>1 out</span><span>10</span><span>20</span><span>31 out</span></div>
+  </div>
+
+  <nav class="toc" aria-label="Capítulos">
+    <a href="#aprendem"><i>Capítulo 1</i><b>Agentes que aprendem</b><span>Competence Map e Skill Miner</span></a>
+    <a href="#conversas"><i>Capítulo 2</i><b>Conversas e lotes</b><span>Conference Room, ações em lote, visões salvas</span></a>
+    <a href="#frota"><i>Capítulo 3</i><b>A frota se cuida</b><span>Atualização com prazo, rollback, launcher novo</span></a>
+  </nav>
+</header>
+
+<main>
+
+<!-- ============ CHAPTER 1 ============ -->
+<section class="chapter" id="aprendem">
+  <div class="wrap">
+    <div class="chapter-head">
+      <span class="eyebrow">Capítulo 1 · Agentes que aprendem</span>
+      <h2>Cada tarefa vira evidência sobre quem a executou</h2>
+      <p>O TwinForge já guardava runs, custos, reviews, PRs e QA de cada tarefa. Agora ele lê esse histórico de volta e diz como cada agente está indo, e o que ensinar a ele primeiro.</p>
+    </div>
+
+    <figure class="shot wide">
+      <div class="frame">
+        <img src="shots/competence.webp" alt="Página Competence Map na instância demo: sinal médio 90 em 75 tarefas, tabelas por modelo e por agente" width="1600" height="1000" loading="lazy">
+        <span class="mark below" style="--x: 1.2%; --y: 30.4%; --w: 13.5%; --h: 3.8%"><em>novo no menu</em></span>
+      </div>
+      <figcaption><span class="crumb">Menu</span><span class="sep">›</span><span class="crumb">Competence Map</span> TwinForge Demo, dados reais<span class="zoom-hint">clique para ampliar</span></figcaption>
+    </figure>
+
+    <div class="feature">
+      <div class="copy">
+        <h3>Competence Map</h3>
+        <p>Uma página nova no menu, abaixo de Tasks, monta o perfil de cada agente por <strong>área × tipo de trabalho</strong>: onde ele vai bem, onde peca, o que ensinar primeiro e quanta autonomia o histórico justifica.</p>
+        <ul>
+          <li><strong>Strong at:</strong> células com sinal médio de 80 ou mais.</li>
+          <li><strong>Struggles with:</strong> células abaixo de 65.</li>
+          <li><strong>Autonomia por célula:</strong> com 80 ou mais o agente roda sozinho, com 60 ou mais pede aprovação, abaixo disso só sugere. Com menos de 8 tarefas, só sugere.</li>
+          <li>O que não foi medido aparece como <code>—</code>, nunca como zero.</li>
+        </ul>
+        <p class="where">Onde: <b>menu › Competence Map</b> e a aba <b>Map</b> de cada tarefa</p>
+      </div>
+      <figure class="shot">
+        <div class="frame">
+          <img src="shots/profile.webp" alt="Perfil do agente Master Arch: Strong at, Teach this first e a grade de competência por área e tipo de trabalho" width="1600" height="979" loading="lazy">
+          <span class="mark" style="--x: 2.4%; --y: 26.6%; --w: 25.6%; --h: 32.2%"><em>Strong at</em></span>
+          <span class="mark inside" style="--x: 2.4%; --y: 60.6%; --w: 95%; --h: 38.4%"><em>área × tipo de trabalho</em></span>
+        </div>
+        <figcaption><span class="crumb">Competence Map</span><span class="sep">›</span><span class="crumb">Agents</span><span class="sep">›</span><span class="crumb">Master Arch</span><span class="zoom-hint">clique para ampliar</span></figcaption>
+      </figure>
+    </div>
+
+    <div class="feature flip">
+      <div class="copy">
+        <h3>Um sinal de 0 a 100, com cada desconto à vista</h3>
+        <p>Na aba <strong>Map</strong>, cada tarefa mostra o fluxo da entrega, review e QA, run a run com diagnóstico, e um sinal que começa em 100 e perde pontos pelo que deu errado. Cada desconto aparece listado.</p>
+        <p>Falha de ambiente ou de fluxo não conta contra o agente. Cada sugestão tem um botão que leva a mensagem pronta para a Conference Room, onde o concierge propõe a mudança de skill ou de instruction como diff.</p>
+        <p class="where">Também: execução comparativa da mesma tarefa com <b>2 ou 3 modelos</b></p>
+        <div class="mock compact">
+          <div class="mock-bar"><span class="dots"><i></i><i></i><i></i></span><span class="url">Task › Map › Signal</span><span class="example-tag">exemplo</span></div>
+          <div class="mock-body signal">
+            <div class="sig-row start"><span class="lbl">Começa em</span><div class="sig-track"><div class="sig-fill" style="left: 0; width: 100%"></div></div><span class="val">100</span></div>
+            <div class="sig-row loss"><span class="lbl">Review devolveu o trabalho</span><div class="sig-track"><div class="sig-fill" style="left: 88%; width: 12%"></div></div><span class="val">−12</span></div>
+            <div class="sig-row loss"><span class="lbl">Run continuado</span><div class="sig-track"><div class="sig-fill" style="left: 80%; width: 8%"></div></div><span class="val">−8</span></div>
+            <div class="sig-row loss"><span class="lbl">Tokens acima da mediana</span><div class="sig-track"><div class="sig-fill" style="left: 70%; width: 10%"></div></div><span class="val">−10</span></div>
+            <div class="sig-row loss" style="--x: 0"><span class="lbl">Upvote na thread</span><div class="sig-track"><div class="sig-fill" style="left: 70%; width: 5%; background: var(--good)"></div></div><span class="val" style="color: var(--good)">+5</span></div>
+            <div class="sig-row total"><span class="lbl">Sinal da tarefa</span><div class="sig-track"><div class="sig-fill" style="left: 0; width: 75%"></div></div><span class="val">75</span></div>
+          </div>
+        </div>
+      </div>
+      <figure class="shot">
+        <div class="frame">
+          <img src="shots/taskmap.webp" alt="Aba Map de uma tarefa: custo da árvore, coordenação, execução, sinal 80 e o fluxo de entrega" width="1600" height="1000" loading="lazy">
+          <span class="mark" style="--x: 61.3%; --y: 57.6%; --w: 14.2%; --h: 3.9%"><em>aba Map</em></span>
+          <span class="mark below" style="--x: 61.5%; --y: 63.4%; --w: 14.2%; --h: 10.6%"><em>sinal 0 a 100</em></span>
+        </div>
+        <figcaption><span class="crumb">Tasks</span><span class="sep">›</span><span class="crumb">TWI-917</span><span class="sep">›</span><span class="crumb">Map</span><span class="zoom-hint">clique para ampliar</span></figcaption>
+      </figure>
+    </div>
+
+    <div class="feature">
+      <div class="copy">
+        <h3>Skill Miner: skills a partir do que os agentes repetem</h3>
+        <p>O agente embutido <code>learning</code> lê os runs que deram certo, acha as sequências de ferramentas que se repetem e propõe uma skill para cada uma. Nada é criado sem o board aceitar.</p>
+        <p>Você escolhe período (1 a 90 dias), agentes, projeto e o orçamento de tokens da revisão. Desde a 1023, o minerador também lê agentes que rodam no adapter <code>crucible_local</code>.</p>
+        <p class="where">Onde: botão <b>Mine skills now</b> em Skills e no cabeçalho de cada agente · CLI <b>twinforgecli skills mine</b></p>
+      </div>
+      <div class="mock">
+        <div class="mock-bar"><span class="dots"><i></i><i></i><i></i></span><span class="url">Como uma skill nasce</span></div>
+        <div class="mock-body">
+          <ol class="pipe">
+            <li><div><b>Lê os transcripts</b><span>Runs bem-sucedidos de tarefas concluídas e não reabertas. Agora inclui Crucible.<span class="badge-new">novo</span></span></div></li>
+            <li><div><b>Acha o padrão</b><span>Sequências de 3 a 8 passos que aparecem em pelo menos 3 runs de 2 tarefas diferentes.</span></div></li>
+            <li><div><b>Dá um veredito</b><span>Aceito, fundido, descartado, edição de skill existente ou skill nova, sempre com justificativa.</span></div></li>
+            <li><div><b>Abre uma tarefa com o rascunho</b><span>No formato Agent Skills. Rascunho inválido ou com segredo é recusado pelo servidor.</span></div></li>
+            <li class="hot"><div><b>O board aceita, e a skill nasce</b><span>Só num run seguinte ao aceite, e com o texto exato que foi aprovado.</span></div></li>
+          </ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ CHAPTER 2 ============ -->
+<section class="chapter" id="conversas">
+  <div class="wrap">
+    <div class="chapter-head">
+      <span class="eyebrow">Capítulo 2 · Conversas e lotes</span>
+      <h2>Menos cliques para falar com a empresa e mexer em muitas tarefas</h2>
+      <p>A Conference Room deixou de ser uma thread única por empresa. E a lista de tarefas, o Kanban e a Inbox ganharam seleção múltipla e visões salvas.</p>
+    </div>
+
+    <div class="feature">
+      <div class="copy">
+        <h3>Conference Room com várias conversas</h3>
+        <p>Cada conversa tem começo, histórico e URL própria, então dá para tratar dois assuntos sem misturá-los, recarregar a página e mandar o link para alguém.</p>
+        <ul>
+          <li><strong>New chat</strong> abre uma sala em branco. A conversa só nasce na primeira mensagem, então entrar e sair não deixa lixo.</li>
+          <li>Duas conversas podem ter respostas em andamento ao mesmo tempo.</li>
+          <li>O concierge agora roda como agente do produto: o custo entra no orçamento da empresa e respeita o hard-stop.</li>
+          <li>Respostas curtas por padrão, e o indicador de "pensando" só desiste depois de silêncio de verdade.</li>
+        </ul>
+        <p class="where">Onde: <b>/board-chat/:sessionId</b> · sempre ligada, sem flag experimental</p>
+      </div>
+      <div class="mock">
+        <div class="mock-bar"><span class="dots"><i></i><i></i><i></i></span><span class="url">/board-chat/7f3c…e21a</span><span class="example-tag">exemplo</span></div>
+        <div class="cr">
+          <div class="cr-hist">
+            <h4>Conversas</h4>
+            <div class="on">Plano de testes do checkout<small>agora</small></div>
+            <div>Orçamento de novembro<small>ontem</small></div>
+            <div>Contratar agente de QA<small>21 out</small></div>
+            <div>Revisar skill de deploy<small>20 out</small></div>
+          </div>
+          <div class="cr-chat">
+            <div class="bubble me">Quem está mais lento nas tarefas de banco?</div>
+            <div class="bubble bot"><b>Concierge</b>O Backend Engineer: sinal 58 em bug fix de banco, em 10 tarefas. Quer que eu proponha uma mudança na skill dele?</div>
+            <div class="bubble me">Quero, como diff.</div>
+            <div class="typing"><i></i><i></i><i></i> lendo as 10 tarefas</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="feature flip">
+      <div class="copy">
+        <h3>Ações em lote nas tarefas</h3>
+        <p>Selecione várias tarefas e aplique status, prioridade, responsável, projeto, ou adicione e remova labels de uma vez, em até 100 por chamada. Na Inbox, arquivar, desarquivar e marcar como lida.</p>
+        <div class="keys">
+          <div><kbd>Shift</kbd> + clique <span>intervalo</span></div>
+          <div><kbd>x</kbd> <span>marca a linha em foco</span></div>
+          <div><kbd>Ctrl/⌘</kbd><kbd>A</kbd> <span>linhas visíveis</span></div>
+          <div><kbd>Esc</kbd> <span>limpa a seleção</span></div>
+        </div>
+        <p>Cada tarefa passa pela mesma regra de uma edição individual. As que falham continuam selecionadas, com o motivo. Cancelar pede confirmação, porque interrompe runs ativos.</p>
+      </div>
+      <figure class="shot">
+        <div class="frame">
+          <video poster="shots/bulk-poster.jpg" width="1200" height="900" autoplay muted loop playsinline aria-label="Clique numa tarefa, Shift + clique em outra e a barra de ações em lote aparece com 6 selecionadas"><source src="shots/bulk.webm" type="video/webm"><source src="shots/bulk.mp4" type="video/mp4"></video>
+          <span class="mark below" style="--x: 1.4%; --y: 19.6%; --w: 5.4%; --h: 25.6%"><em>Shift + clique</em></span>
+          <span class="mark timed" data-from="2.8" data-to="99" style="--x: 9.6%; --y: 91.8%; --w: 60.6%; --h: 6.6%"><em>barra de ações em lote</em></span>
+        </div>
+        <figcaption><span class="crumb">Tasks</span><span class="sep">›</span><span class="crumb">seleção múltipla</span> gravado na TwinForge Demo<span class="zoom-hint">clique para ampliar</span></figcaption>
+      </figure>
+    </div>
+
+    <div class="trio">
+      <div class="card">
+        <span class="big">?view=</span>
+        <h4>Visões salvas</h4>
+        <p>Filtros, ordenação, agrupamento, modo lista ou quadro e colunas ficam numa visão com link próprio. Publique para a empresa ou guarde para você: até 50 de cada.</p>
+      </div>
+      <div class="card">
+        <span class="big">209 s</span>
+        <h4>O "pensando" espera de verdade</h4>
+        <p>Um turno real levou 209 segundos com o run saudável, e a tela desistia aos 120. Agora o limite conta silêncio: enquanto o concierge trabalha, o indicador fica.</p>
+      </div>
+      <div class="card">
+        <span class="big">1 h</span>
+        <h4>Reset de senha pelo admin</h4>
+        <p>Em Access, o admin gera um link de uso único que vale 1 hora. Quem abre define a própria senha; o admin nunca a vê.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ CHAPTER 3 ============ -->
+<section class="chapter" id="frota">
+  <div class="wrap">
+    <div class="chapter-head">
+      <span class="eyebrow">Capítulo 3 · A frota se cuida</span>
+      <h2>Atualizar, segurar e voltar versão sem pedir para ninguém reabrir nada</h2>
+      <p>O admin da organização e o operador da frota agora decidem quando uma máquina atualiza e para qual versão. O launcher passou a reiniciar o TwinForge sozinho para concluir a atualização.</p>
+    </div>
+
+    <div class="feature">
+      <div class="copy">
+        <h3>Atualização com prazo e rollback</h3>
+        <ul>
+          <li><strong>Update</strong> com prazo: agora, em 4 h ou em 24 h. A máquina termina as tarefas em andamento antes de reiniciar (até 1 h).</li>
+          <li><strong>Roll back to</strong> manda a máquina para uma versão exata, inclusive anterior, e ela fica lá até alguém liberar. A tela mostra <strong>Held at</strong>.</li>
+          <li>A lista só oferece versões que a máquina aceita, e uma máquina recém-ligada aparece pronta em segundos, não em 5 minutos.</li>
+          <li>O WatchTower também pode pedir a atualização, e a faixa no app diz de onde veio o pedido.</li>
+        </ul>
+        <p class="where">Onde: <b>Configurações da instância › Machines</b></p>
+      </div>
+      <div class="mock">
+        <div class="mock-bar"><span class="dots"><i></i><i></i><i></i></span><span class="url">Instance settings › Machines</span><span class="example-tag">exemplo</span></div>
+        <div style="overflow-x: auto">
+          <table class="machines">
+            <thead><tr><th>Máquina</th><th>Versão</th><th>Estado</th></tr></thead>
+            <tbody>
+              <tr><td class="host">mac-design-02</td><td class="ver">2026.1022.0</td><td><span class="state ok">Up to date</span></td></tr>
+              <tr><td class="host">win-qa-07</td><td class="ver">2026.1021.0</td><td><span class="state held">Held at 2026.1021.0</span></td></tr>
+              <tr><td class="host">linux-ci-03</td><td class="ver">2026.1008.0</td><td><span class="state due">Update em 4 h</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="menu" aria-hidden="true">
+          <div class="on">Update now <small>agora</small></div>
+          <div>Update in 4 h <small>prazo</small></div>
+          <div>Update in 24 h <small>prazo</small></div>
+          <hr>
+          <div>Roll back to <small>2026.1021.0</small></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="feature flip">
+      <div class="copy">
+        <h3>O launcher conclui a atualização sozinho</h3>
+        <p>O comando <code>twinforge</code> passou a supervisionar o servidor. Quando uma atualização termina de baixar, ele reinicia no mesmo terminal e aplica as migrações pendentes. Se o servidor cair mais de 3 vezes em 10 minutos, ele para e explica o motivo.</p>
+        <p>Ctrl-C continua encerrando normalmente, inclusive no <code>/bin/sh</code> antigo do macOS.</p>
+        <p class="where">Vale depois de uma atualização comum e uma reabertura</p>
+      </div>
+      <div class="term" aria-label="Exemplo de saída do terminal">
+<pre><span class="p">$</span> twinforge
+<span class="d">TwinForge 2026.1021.0 · http://localhost:3100</span>
+<span class="o">↓ versão 2026.1022.0 baixada, reiniciando para concluir</span>
+<span class="d">  servidor saiu com código 75</span>
+<span class="d">  aplicando 2 migrações pendentes…</span>
+<span class="g">✓ TwinForge 2026.1022.0 · http://localhost:3100</span></pre>
+      </div>
+    </div>
+
+    <div class="feature">
+      <div class="copy">
+        <h3>As novidades aparecem dentro do produto</h3>
+        <p>Depois do login, ou quando as notas mudam, abre um modal com o que mudou na versão em execução, com a data no título. Fechar registra a leitura por usuário, então ele não volta em outro navegador.</p>
+        <p>No instalável, o rodapé do modal mostra o estado da atualização, com o botão <strong>Atualizar</strong>. E as mesmas notas chegam ao canal de anúncios do Slack a cada deploy.</p>
+        <p class="where">Onde: abre sozinho depois do login · menu da conta › <b>Novidades</b> quando há atualização pendente</p>
+      </div>
+      <figure class="shot narrow">
+        <div class="frame">
+          <img src="shots/whatsnew.webp" alt="Modal What's new in version v2026.1023.0 com a lista do que foi corrigido" width="672" height="704" loading="lazy">
+          <span class="mark below" style="--x: 2.6%; --y: 3.2%; --w: 66%; --h: 4.6%"><em>versão e data</em></span>
+        </div>
+        <figcaption><span class="crumb">Depois do login</span><span class="sep">›</span><span class="crumb">What's new</span><span class="zoom-hint">clique para ampliar</span></figcaption>
+      </figure>
+    </div>
+
+    <div class="trio duo">
+      <div class="card">
+        <span class="big">1 secret</span>
+        <h4>Não derruba mais a company</h4>
+        <p>Uma credencial vinculada na organização fazia a company inteira falhar ao descer. Agora ela fica de fora, com um aviso, e o resto desce normalmente.</p>
+      </div>
+      <div class="card">
+        <span class="big">.webjump.ai</span>
+        <h4>Endereço nosso para atualizar</h4>
+        <p>O instalável busca atualizações em <code>dist.twinforge.webjump.ai</code>. O endereço antigo continua valendo para quem ainda não atualizou.</p>
+      </div>
+    </div>
+
+    <div class="install">
+      <h3>Ainda não tem o TwinForge na sua máquina?</h3>
+      <p>Um comando instala e verifica a assinatura. Depois disso, as atualizações chegam sozinhas.</p>
+      <div class="cmd"><code data-shell="macOS / Linux" id="cmd-sh">curl -fsSL https://dist.twinforge.webjump.ai/install.sh | sh</code><button type="button" data-copy="cmd-sh">Copiar</button></div>
+      <div class="cmd"><code data-shell="Windows" id="cmd-ps">irm https://dist.twinforge.webjump.ai/install.ps1 | iex</code><button type="button" data-copy="cmd-ps">Copiar</button></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ MORE ============ -->
+<section class="chapter" id="mais">
+  <div class="wrap">
+    <div class="chapter-head">
+      <span class="eyebrow">E também</span>
+      <h2>Correções que você vai sentir no dia a dia</h2>
+    </div>
+    <div class="more">
+      <div><b>Mine skills now não trava mais</b><span>Os agentes embutidos acordavam e tinham todas as chamadas recusadas. Agora o run age em nome de quem o disparou.</span></div>
+      <div><b>Tarefa mãe para de acordar à toa</b><span>Uma mãe esperando as filhas não acorda mais o responsável por timer só para ver que nada mudou.</span></div>
+      <div><b>Quem fatia corrige o texto das filhas</b><span>O responsável pela mãe pode editar título e descrição de filhas atribuídas a outro agente.</span></div>
+      <div><b>Handoff atrasado não acorda tarefa fechada</b><span>Um wake adiado é conferido de novo contra a tarefa atual antes de virar run.</span></div>
+      <div><b>Telas sem códigos internos</b><span>Machines, MCP connections, OAuth e o Competence Map mostram estados e erros por extenso.</span></div>
+      <div><b>Melhor no celular</b><span>Billing, seleção de tarefas, telas de acesso e a ajuda do mapa funcionam com toque e sem rolagem lateral.</span></div>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>TwinForge · versões 2026.1006.0 a 2026.1023.0</span>
+    <a href="https://github.com/air-bizapps/twinforge-dist/releases">Todas as releases no GitHub</a>
+  </div>
+</footer>
+
+<script>
+  // Day ticks on the October rail
+  (function () {
+    var days = document.querySelector('.rail-days');
+    for (var i = 0; i < 31; i++) days.appendChild(document.createElement('span'));
+  })();
+
+  var calm = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // Embers rising behind the hero
+  (function () {
+    var c = document.querySelector('canvas.sparks');
+    if (!c || calm) return;
+    var ctx = c.getContext('2d'), dpr = Math.min(window.devicePixelRatio || 1, 2), W, H, parts = [];
+    var css = getComputedStyle(document.documentElement);
+    var hot = css.getPropertyValue('--heat-hot').trim() || '#1e9bff';
+    var deep = css.getPropertyValue('--heat-deep').trim() || '#7c3aed';
+    function size() { W = c.clientWidth; H = c.clientHeight; c.width = W * dpr; c.height = H * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0); }
+    function spawn() {
+      return { x: Math.random() * W, y: H + Math.random() * 40, vx: (Math.random() - 0.5) * 0.35, vy: -(0.35 + Math.random() * 1.1),
+               r: 0.6 + Math.random() * 1.9, life: 0, max: 220 + Math.random() * 260, c: Math.random() < 0.7 ? hot : deep };
+    }
+    size(); window.addEventListener('resize', size);
+    for (var i = 0; i < 70; i++) { var p = spawn(); p.y = Math.random() * H; p.life = Math.random() * p.max; parts.push(p); }
+    var visible = true;
+    new IntersectionObserver(function (e) { visible = e[0].isIntersecting; }).observe(c);
+    (function tick() {
+      if (visible && !document.hidden) {
+        ctx.clearRect(0, 0, W, H);
+        for (var i = 0; i < parts.length; i++) {
+          var p = parts[i];
+          p.life++; p.x += p.vx + Math.sin((p.life + i * 37) / 40) * 0.25; p.y += p.vy;
+          var a = Math.max(0, 1 - p.life / p.max);
+          if (a <= 0 || p.y < -10) { parts[i] = spawn(); continue; }
+          ctx.globalAlpha = a * 0.85; ctx.fillStyle = p.c; ctx.shadowColor = p.c; ctx.shadowBlur = 8;
+          ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.fill();
+        }
+      }
+      requestAnimationFrame(tick);
+    })();
+  })();
+
+  // Scroll reveal and signal bars growing in
+  (function () {
+    if (calm || !('IntersectionObserver' in window)) return;
+    var vh = window.innerHeight;
+    var targets = document.querySelectorAll('.chapter-head, .feature > *, .trio .card, .install, .more > div');
+    var fills = document.querySelectorAll('.sig-fill');
+    fills.forEach(function (f) { f.dataset.w = f.style.width; });
+    document.documentElement.classList.add('js');
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (!e.isIntersecting) return;
+        e.target.classList.add('in');
+        e.target.querySelectorAll('.sig-fill').forEach(function (f) { f.style.width = f.dataset.w; });
+        io.unobserve(e.target);
+      });
+    }, { rootMargin: '0px 0px -12% 0px' });
+    targets.forEach(function (t, i) {
+      if (t.getBoundingClientRect().top < vh) return; // already on screen: leave as is
+      t.classList.add('reveal');
+      t.style.transitionDelay = (i % 3) * 90 + 'ms';
+      t.querySelectorAll('.sig-fill').forEach(function (f) { f.style.width = '0%'; });
+      io.observe(t);
+    });
+  })();
+
+  // Tilt and heat glare on screenshots
+  (function () {
+    if (calm || !window.matchMedia('(hover: hover)').matches) return;
+    document.querySelectorAll('.shot .frame').forEach(function (fr) {
+      fr.addEventListener('pointermove', function (e) {
+        var r = fr.getBoundingClientRect(), x = (e.clientX - r.left) / r.width, y = (e.clientY - r.top) / r.height;
+        fr.style.setProperty('--ry', ((x - 0.5) * 6).toFixed(2) + 'deg');
+        fr.style.setProperty('--rx', ((0.5 - y) * 5).toFixed(2) + 'deg');
+        fr.style.setProperty('--gx', (x * 100).toFixed(1) + '%');
+        fr.style.setProperty('--gy', (y * 100).toFixed(1) + '%');
+        fr.style.setProperty('--glare', '1');
+      });
+      fr.addEventListener('pointerleave', function () {
+        ['--rx', '--ry'].forEach(function (k) { fr.style.setProperty(k, '0deg'); });
+        fr.style.setProperty('--glare', '0');
+      });
+    });
+  })();
+
+
+
+  // Outlines that follow the video: only shown while that element is on screen
+  document.querySelectorAll('.shot video').forEach(function (v) {
+    var marks = v.parentNode.querySelectorAll('.mark.timed');
+    if (!marks.length) return;
+    function sync() {
+      var t = v.currentTime;
+      marks.forEach(function (m) { m.classList.toggle('on', t >= +m.dataset.from && t <= +m.dataset.to); });
+      if (!v.paused) requestAnimationFrame(sync);
+    }
+    v.addEventListener('play', sync); v.addEventListener('seeked', sync); sync();
+  });
+
+  // Click a screenshot to see it full size
+  (function () {
+    document.querySelectorAll('.shot .frame').forEach(function (fr) {
+      fr.setAttribute('tabindex', '0');
+      fr.setAttribute('role', 'button');
+      fr.setAttribute('aria-label', 'Ampliar captura');
+      function open() {
+        var media = fr.querySelector('img, video');
+        var box = document.createElement('div');
+        box.className = 'lightbox';
+        box.setAttribute('role', 'dialog');
+        box.setAttribute('aria-modal', 'true');
+        var big = media.cloneNode(true);
+        big.removeAttribute('loading');
+        if (big.tagName === 'VIDEO') { big.muted = true; big.autoplay = true; big.loop = true; big.playsInline = true; }
+        var btn = document.createElement('button');
+        btn.type = 'button'; btn.textContent = 'Fechar · Esc';
+        box.appendChild(big); box.appendChild(btn);
+        document.body.appendChild(box);
+        btn.focus();
+        function close() { box.remove(); document.removeEventListener('keydown', onKey); fr.focus(); }
+        function onKey(e) { if (e.key === 'Escape') close(); }
+        box.addEventListener('click', close);
+        document.addEventListener('keydown', onKey);
+      }
+      fr.addEventListener('click', open);
+      fr.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } });
+    });
+  })();
+
+  // Copy buttons for the install commands
+  document.querySelectorAll('[data-copy]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var el = document.getElementById(btn.dataset.copy);
+      var done = function () { btn.textContent = 'Copiado'; setTimeout(function () { btn.textContent = 'Copiar'; }, 1600); };
+      var fallback = function () {
+        var r = document.createRange(); r.selectNodeContents(el);
+        var s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+        btn.textContent = 'Ctrl+C';
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(el.textContent).then(done, fallback);
+      } else { fallback(); }
+    });
+  });
+</script>
+</body>
+</html>
