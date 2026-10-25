@@ -3,7 +3,7 @@
   "schemaVersion": 1,
   "keyId": "2026-08-canary",
   "channel": "canary",
-  "sequence": 5,
+  "sequence": 6,
   "versions": [
     {
       "version": "2026.1021.0",
@@ -34,6 +34,12 @@
       "publishedAt": "2026-10-23T19:45:13.360Z",
       "schemaHead": 234,
       "schemaCompatibleFrom": "2026.1023.1"
+    },
+    {
+      "version": "2026.1025.0",
+      "publishedAt": "2026-10-25T16:43:11.996Z",
+      "schemaHead": 235,
+      "schemaCompatibleFrom": "2026.1025.0"
     }
   ]
 }
