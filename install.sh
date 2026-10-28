@@ -714,6 +714,16 @@ remember_channel() {
 #      follows this text to the letter opens an empty board and concludes
 #      the install is broken. Same shape as (1) and (2): the text described
 #      what enrolling used to imply, not what it does now.
+#
+#   4. Then 2026.830.0 made (2) true after all, and this kept saying "it runs
+#      as a local instance on this machine". An unbound machine now boots
+#      LOCKED: the server is up, every product route answers `403 unbound`,
+#      and the UI shows only the bind screen (instance name, then e-mail and
+#      password). The reader who believed the old text either went looking
+#      for a local board that does not exist, or skipped the link. Note the
+#      reason (2) was wrong when written: `evaluateBoot` in the launcher did
+#      allow standalone -- the gate moved into the server, and that is what
+#      changed underneath this text.
 print_next_steps() {
   cat <<EOF
 
@@ -723,14 +733,15 @@ Start it with:
 
   twinforge
 
-It runs as a local instance on this machine. To link it to your organization's
-instance instead:
+It starts locked until this machine is linked to your organization's
+instance. Open http://127.0.0.1:3100 and enter the instance name and your
+login there -- or link it from the terminal:
 
   twinforge enroll --instance https://twinforge.your-org.com --pull
 
-Enrolling on its own only authorizes the link -- it brings down no data. The
-board starts empty on purpose until you also hydrate; \`--pull\` does both in
-one step. (Already enrolled? \`twinforge pull\` hydrates on its own.)
+Linking on its own brings down no data. The board starts empty on purpose
+until you also hydrate; \`--pull\` does both in one step. (Already linked?
+\`twinforge pull\` hydrates on its own.)
 
 (Open a new shell first if this was your first install, so $APP_DIR/bin is on your PATH.)
 EOF
