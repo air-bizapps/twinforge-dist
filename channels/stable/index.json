@@ -1,0 +1,15 @@
+{
+  "kind": "twinforge-channel-index",
+  "schemaVersion": 1,
+  "keyId": "2026-08-canary",
+  "channel": "stable",
+  "sequence": 1,
+  "versions": [
+    {
+      "version": "2026.1028.1",
+      "publishedAt": "2026-10-28T22:17:08.281Z",
+      "schemaHead": 238,
+      "schemaCompatibleFrom": "2026.1028.1"
+    }
+  ]
+}
