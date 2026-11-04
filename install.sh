@@ -737,7 +737,10 @@ It starts locked until this machine is linked to your organization's
 instance. Open http://127.0.0.1:3100 and enter the instance name and your
 login there -- or link it from the terminal:
 
-  twinforge enroll --instance https://twinforge.your-org.com --pull
+  twinforge enroll --instance https://<your-org>.twinforge.webjump.ai --pull
+
+Only TwinForge instances under twinforge.webjump.ai can be linked. For a
+trial, use https://enroll.twinforge.webjump.ai.
 
 Linking on its own brings down no data. The board starts empty on purpose
 until you also hydrate; \`--pull\` does both in one step. (Already linked?
