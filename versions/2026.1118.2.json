@@ -1,0 +1,30 @@
+{
+  "kind": "twinforge-version",
+  "schemaVersion": 1,
+  "keyId": "2026-08-canary",
+  "version": "2026.1118.2",
+  "artifacts": {
+    "darwin-arm64": {
+      "url": "https://github.com/air-bizapps/twinforge-dist/releases/download/tfapp.v2026.1118.2/twinforge-2026.1118.2-darwin-arm64.tar.gz",
+      "sha256": "d68485627310fcdcfe0359651aa3836bfb9c661a16609600b2c7ee0b1dece7d8",
+      "sizeBytes": 249044956
+    },
+    "darwin-x64": {
+      "url": "https://github.com/air-bizapps/twinforge-dist/releases/download/tfapp.v2026.1118.2/twinforge-2026.1118.2-darwin-x64.tar.gz",
+      "sha256": "556c6fc221406f4a30feb09fbda0218e774509a993e65662a95409fef7830781",
+      "sizeBytes": 252264791
+    },
+    "linux-x64": {
+      "url": "https://github.com/air-bizapps/twinforge-dist/releases/download/tfapp.v2026.1118.2/twinforge-2026.1118.2-linux-x64.tar.gz",
+      "sha256": "d2bb684fa19ebe500f287631d6fa10096598d977c78701c3043841f2423012bf",
+      "sizeBytes": 192330155
+    },
+    "win-x64": {
+      "url": "https://github.com/air-bizapps/twinforge-dist/releases/download/tfapp.v2026.1118.2/twinforge-2026.1118.2-win-x64.tar.gz",
+      "sha256": "c32f8053fd85bddd0206129895edd08033b5ab3b603b97ce867a2e885b2617d7",
+      "sizeBytes": 147457103
+    }
+  },
+  "schemaHead": 253,
+  "schemaCompatibleFrom": "2026.1118.2"
+}
